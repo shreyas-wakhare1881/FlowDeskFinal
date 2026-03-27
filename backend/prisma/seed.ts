@@ -1,0 +1,318 @@
+import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import * as bcrypt from 'bcryptjs';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) as any,
+});
+
+const SEED_PROJECTS = [
+  {
+    projectID: 'PRJ-001',
+    projectName: 'Payment Gateway Integration',
+    projectDescription: 'Integrating third-party payment gateway APIs with authentication layer',
+    status: 'in-progress',
+    statusLabel: 'In Progress',
+    priority: 'critical',
+    category: 'Backend',
+    teamID: 'TEAM-BCT',
+    teamName: 'Backend-Core-Team',
+    assigneeID: 'USER-001',
+    assigneeName: 'Rahul Kumar',
+    assigneeAvatar: 'RK',
+    assigneeAvatarColor: '#4361ee',
+    assignedDate: new Date('2026-03-10'),
+    dueDate: new Date('2026-03-14'),
+    isRecurring: false,
+    tags: ['Backend', 'API', 'Phase-2'],
+    teamMembers: [
+      { memberId: 'USER-001', name: 'Rahul Kumar',  avatar: 'RK', avatarColor: '#4361ee', role: 'Owner' },
+      { memberId: 'USER-002', name: 'Sneha Patel',  avatar: 'SP', avatarColor: '#06d6a0', role: 'Team Member' },
+      { memberId: 'USER-003', name: 'Vishal Tiwari', avatar: 'VT', avatarColor: '#3a86ff', role: 'Team Member' },
+    ],
+    metrics: { completionPercentage: 85, tasksTotal: 12, tasksCompleted: 10, tasksInProgress: 1, tasksOverdue: 1 },
+  },
+  {
+    projectID: 'PRJ-002',
+    projectName: 'Mobile UI Redesign',
+    projectDescription: 'Complete overhaul of mobile app interface with new design system',
+    status: 'overdue',
+    statusLabel: 'Overdue',
+    priority: 'medium',
+    category: 'Design',
+    teamID: 'TEAM-FE1',
+    teamName: 'Frontend-Unit-01',
+    assigneeID: 'USER-002',
+    assigneeName: 'Sneha Patel',
+    assigneeAvatar: 'SP',
+    assigneeAvatarColor: '#06d6a0',
+    assignedDate: new Date('2026-03-05'),
+    dueDate: new Date('2026-03-11'),
+    isRecurring: false,
+    tags: ['Frontend', 'Mobile', 'UI/UX'],
+    teamMembers: [
+      { memberId: 'USER-002', name: 'Sneha Patel',  avatar: 'SP', avatarColor: '#06d6a0', role: 'Owner' },
+      { memberId: 'USER-004', name: 'Arjun Mehta',  avatar: 'AM', avatarColor: '#7209b7', role: 'Team Member' },
+      { memberId: 'USER-005', name: 'Priya Das',    avatar: 'PD', avatarColor: '#f9a825', role: 'Team Member' },
+      { memberId: 'USER-001', name: 'Rahul Kumar',  avatar: 'RK', avatarColor: '#ef233c', role: 'Team Member' },
+    ],
+    metrics: { completionPercentage: 52, tasksTotal: 18, tasksCompleted: 9, tasksInProgress: 3, tasksOverdue: 6 },
+  },
+  {
+    projectID: 'PRJ-003',
+    projectName: 'DB Schema Design v2',
+    projectDescription: 'Optimizing database schema for better performance and scalability',
+    status: 'in-progress',
+    statusLabel: 'In Progress',
+    priority: 'low',
+    category: 'Database',
+    teamID: 'TEAM-DBS',
+    teamName: 'Database-Squad',
+    assigneeID: 'USER-003',
+    assigneeName: 'Vishal Tiwari',
+    assigneeAvatar: 'VT',
+    assigneeAvatarColor: '#3a86ff',
+    assignedDate: new Date('2026-03-12'),
+    dueDate: new Date('2026-03-20'),
+    isRecurring: false,
+    tags: ['Database', 'Schema', 'Performance'],
+    teamMembers: [
+      { memberId: 'USER-003', name: 'Vishal Tiwari', avatar: 'VT', avatarColor: '#3a86ff', role: 'Owner' },
+      { memberId: 'USER-001', name: 'Rahul Kumar',   avatar: 'RK', avatarColor: '#4361ee', role: 'Team Member' },
+    ],
+    metrics: { completionPercentage: 31, tasksTotal: 8, tasksCompleted: 2, tasksInProgress: 2, tasksOverdue: 1 },
+  },
+  {
+    projectID: 'PRJ-004',
+    projectName: 'Weekly Status Report',
+    projectDescription: 'Comprehensive weekly progress report for stakeholders',
+    status: 'completed',
+    statusLabel: 'Completed',
+    priority: 'medium',
+    category: 'General',
+    teamID: 'TEAM-MGT',
+    teamName: 'Management-Team',
+    assigneeID: 'USER-004',
+    assigneeName: 'Arjun Mehta',
+    assigneeAvatar: 'AM',
+    assigneeAvatarColor: '#7209b7',
+    assignedDate: new Date('2026-03-06'),
+    dueDate: new Date('2026-03-13'),
+    isRecurring: false,
+    tags: ['Reporting', 'Management'],
+    teamMembers: [
+      { memberId: 'USER-004', name: 'Arjun Mehta', avatar: 'AM', avatarColor: '#7209b7', role: 'Owner' },
+    ],
+    metrics: { completionPercentage: 100, tasksTotal: 5, tasksCompleted: 5, tasksInProgress: 0, tasksOverdue: 0 },
+  },
+  {
+    projectID: 'PRJ-005',
+    projectName: 'QA Testing – Sprint 4',
+    projectDescription: 'End-to-end testing for sprint 4 features and bug fixes',
+    status: 'in-progress',
+    statusLabel: 'In Progress',
+    priority: 'critical',
+    category: 'QA',
+    teamID: 'TEAM-QA',
+    teamName: 'Quality-Assurance',
+    assigneeID: 'USER-005',
+    assigneeName: 'Priya Das',
+    assigneeAvatar: 'PD',
+    assigneeAvatarColor: '#f9a825',
+    assignedDate: new Date('2026-03-08'),
+    dueDate: new Date('2026-03-15'),
+    isRecurring: false,
+    tags: ['QA', 'Testing', 'Sprint-4'],
+    teamMembers: [
+      { memberId: 'USER-005', name: 'Priya Das',    avatar: 'PD', avatarColor: '#f9a825', role: 'Owner' },
+      { memberId: 'USER-002', name: 'Sneha Patel',  avatar: 'SP', avatarColor: '#06d6a0', role: 'Team Member' },
+      { memberId: 'USER-003', name: 'Vishal Tiwari', avatar: 'VT', avatarColor: '#3a86ff', role: 'Team Member' },
+    ],
+    metrics: { completionPercentage: 68, tasksTotal: 22, tasksCompleted: 15, tasksInProgress: 4, tasksOverdue: 3 },
+  },
+  {
+    projectID: 'PRJ-006',
+    projectName: 'Client Demo Preparation',
+    projectDescription: 'Preparing comprehensive demo for Q2 client presentation',
+    status: 'in-progress',
+    statusLabel: 'In Progress',
+    priority: 'critical',
+    category: 'General',
+    teamID: 'TEAM-DSA',
+    teamName: 'Design-Squad-Alpha',
+    assigneeID: 'USER-001',
+    assigneeName: 'Rahul Kumar',
+    assigneeAvatar: 'RK',
+    assigneeAvatarColor: '#ef233c',
+    assignedDate: new Date('2026-03-09'),
+    dueDate: new Date('2026-03-16'),
+    isRecurring: false,
+    tags: ['Demo', 'Client', 'Presentation'],
+    teamMembers: [
+      { memberId: 'USER-001', name: 'Rahul Kumar',  avatar: 'RK', avatarColor: '#ef233c', role: 'Owner' },
+      { memberId: 'USER-004', name: 'Arjun Mehta',  avatar: 'AM', avatarColor: '#7209b7', role: 'Team Member' },
+      { memberId: 'USER-002', name: 'Sneha Patel',  avatar: 'SP', avatarColor: '#06d6a0', role: 'Team Member' },
+      { memberId: 'USER-005', name: 'Priya Das',    avatar: 'PD', avatarColor: '#f9a825', role: 'Team Member' },
+      { memberId: 'USER-003', name: 'Vishal Tiwari', avatar: 'VT', avatarColor: '#3a86ff', role: 'Team Member' },
+    ],
+    metrics: { completionPercentage: 42, tasksTotal: 10, tasksCompleted: 4, tasksInProgress: 3, tasksOverdue: 2 },
+  },
+  {
+    projectID: 'PRJ-007',
+    projectName: 'Security Audit – Q1',
+    projectDescription: 'Full vulnerability assessment and penetration testing for Q1 release',
+    status: 'in-progress',
+    statusLabel: 'In Progress',
+    priority: 'critical',
+    category: 'Security',
+    teamID: 'TEAM-SEC',
+    teamName: 'Security-Ops',
+    assigneeID: 'USER-004',
+    assigneeName: 'Arjun Mehta',
+    assigneeAvatar: 'AM',
+    assigneeAvatarColor: '#7209b7',
+    assignedDate: new Date('2026-03-14'),
+    dueDate: new Date('2026-03-22'),
+    isRecurring: false,
+    tags: ['Security', 'Audit'],
+    teamMembers: [
+      { memberId: 'USER-004', name: 'Arjun Mehta',  avatar: 'AM', avatarColor: '#7209b7', role: 'Owner' },
+      { memberId: 'USER-003', name: 'Vishal Tiwari', avatar: 'VT', avatarColor: '#3a86ff', role: 'Team Member' },
+    ],
+    metrics: { completionPercentage: 55, tasksTotal: 14, tasksCompleted: 7, tasksInProgress: 3, tasksOverdue: 2 },
+  },
+  {
+    projectID: 'PRJ-008',
+    projectName: 'Performance Optimization',
+    projectDescription: 'Reducing API response times and improving frontend bundle size',
+    status: 'in-progress',
+    statusLabel: 'In Progress',
+    priority: 'medium',
+    category: 'Backend',
+    teamID: 'TEAM-PLT',
+    teamName: 'Platform-Team',
+    assigneeID: 'USER-005',
+    assigneeName: 'Priya Das',
+    assigneeAvatar: 'PD',
+    assigneeAvatarColor: '#f9a825',
+    assignedDate: new Date('2026-03-11'),
+    dueDate: new Date('2026-03-18'),
+    isRecurring: false,
+    tags: ['Performance', 'Backend'],
+    teamMembers: [
+      { memberId: 'USER-005', name: 'Priya Das',   avatar: 'PD', avatarColor: '#f9a825', role: 'Owner' },
+      { memberId: 'USER-001', name: 'Rahul Kumar', avatar: 'RK', avatarColor: '#4361ee', role: 'Team Member' },
+      { memberId: 'USER-002', name: 'Sneha Patel', avatar: 'SP', avatarColor: '#06d6a0', role: 'Team Member' },
+    ],
+    metrics: { completionPercentage: 78, tasksTotal: 9, tasksCompleted: 7, tasksInProgress: 1, tasksOverdue: 0 },
+  },
+  {
+    projectID: 'PRJ-009',
+    projectName: 'Onboarding Flow Redesign',
+    projectDescription: 'Revamping new user onboarding with interactive tutorials and tooltips',
+    status: 'in-progress',
+    statusLabel: 'In Progress',
+    priority: 'low',
+    category: 'Design',
+    teamID: 'TEAM-PRD',
+    teamName: 'Product-Squad',
+    assigneeID: 'USER-002',
+    assigneeName: 'Sneha Patel',
+    assigneeAvatar: 'SP',
+    assigneeAvatarColor: '#06d6a0',
+    assignedDate: new Date('2026-03-15'),
+    dueDate: new Date('2026-03-25'),
+    isRecurring: false,
+    tags: ['Frontend', 'Design', 'UI/UX'],
+    teamMembers: [
+      { memberId: 'USER-002', name: 'Sneha Patel', avatar: 'SP', avatarColor: '#06d6a0', role: 'Owner' },
+      { memberId: 'USER-004', name: 'Arjun Mehta', avatar: 'AM', avatarColor: '#7209b7', role: 'Team Member' },
+    ],
+    metrics: { completionPercentage: 15, tasksTotal: 20, tasksCompleted: 3, tasksInProgress: 5, tasksOverdue: 2 },
+  },
+];
+
+async function main() {
+  console.log('🌱 Seeding database...');
+
+  // Seed default admin user
+  const passwordHash = await bcrypt.hash('admin123', 10);
+  await prisma.user.upsert({
+    where: { email: 'admin@flowdesk.com' },
+    update: {},
+    create: {
+      email: 'admin@flowdesk.com',
+      name: 'Shreyas Wakhare',
+      passwordHash,
+      role: 'admin',
+    },
+  });
+  console.log('✅ Default admin user seeded: admin@flowdesk.com / admin123');
+
+  // Clear existing data (in correct order to respect FK constraints)
+  await prisma.teamParticipant.deleteMany();
+  await prisma.team.deleteMany();
+  await prisma.taskAssignee.deleteMany();
+  await prisma.task.deleteMany();
+  await prisma.projectTag.deleteMany();
+  await prisma.teamMember.deleteMany();
+  await prisma.teamLead.deleteMany();
+  await prisma.metrics.deleteMany();
+  await prisma.project.deleteMany();
+
+  for (const p of SEED_PROJECTS) {
+    await prisma.project.create({
+      data: {
+        projectID:          p.projectID,
+        projectName:        p.projectName,
+        projectDescription: p.projectDescription,
+        status:             p.status,
+        statusLabel:        p.statusLabel,
+        priority:           p.priority,
+        category:           p.category,
+        teamID:             p.teamID,
+        teamName:           p.teamName,
+        assigneeID:         p.assigneeID,
+        assigneeName:       p.assigneeName,
+        assigneeAvatar:     p.assigneeAvatar,
+        assigneeAvatarColor: p.assigneeAvatarColor,
+        assignedDate:       p.assignedDate,
+        dueDate:            p.dueDate,
+        isRecurring:        p.isRecurring,
+        tags: {
+          create: p.tags.map((tag) => ({ tag })),
+        },
+        teamMembers: {
+          create: p.teamMembers.map((m) => ({
+            memberId:   m.memberId,
+            name:       m.name,
+            avatar:     m.avatar,
+            avatarColor: m.avatarColor,
+            role:       m.role,
+            status:     'online',
+          })),
+        },
+        metrics: {
+          create: {
+            completionPercentage: p.metrics.completionPercentage,
+            tasksTotal:           p.metrics.tasksTotal,
+            tasksCompleted:       p.metrics.tasksCompleted,
+            tasksInProgress:      p.metrics.tasksInProgress,
+            tasksOverdue:         p.metrics.tasksOverdue,
+          },
+        },
+      },
+    });
+    console.log(`  ✅ Created ${p.projectID} — ${p.projectName}`);
+  }
+
+  console.log(`\n🎉 Seed complete! ${SEED_PROJECTS.length} projects inserted.`);
+}
+
+main()
+  .catch((e) => {
+    console.error('❌ Seed failed:', e);
+    process.exit(1);
+  })
+  .finally(() => prisma.$disconnect());

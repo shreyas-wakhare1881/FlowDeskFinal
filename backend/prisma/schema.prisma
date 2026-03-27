@@ -1,0 +1,201 @@
+// PM Tool Database Schema
+// Matches exactly with current localStorage structure
+// Created: March 17, 2026
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================
+// USERS — Authentication
+// ============================================
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         String   @default("member") // 'admin', 'member'
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([email])
+  @@map("users")
+}
+
+// ============================================
+// GLOBAL VIEW - PROJECT MANAGEMENT
+// ============================================
+
+model Project {
+  id                  String    @id @default(uuid())
+  projectID           String    @unique         // PRJ-001, PRJ-002, etc.
+  projectName         String
+  projectDescription  String?
+  status              String                    // 'todo', 'in-progress', 'completed', 'overdue'
+  statusLabel         String                    // 'To Do', 'In Progress', etc.
+  priority            String                    // 'critical', 'medium', 'low'
+  category            String                    // 'General', 'Design', etc.
+  
+  // Dates
+  createdDate         DateTime  @default(now())
+  assignedDate        DateTime
+  dueDate             DateTime?
+  completedDate       DateTime?
+  
+  // Team Info (basic)
+  teamID              String
+  teamName            String
+  assigneeID          String
+  assigneeName        String
+  assigneeAvatar      String
+  assigneeAvatarColor String
+  
+  // New project-level fields
+  isRecurring         Boolean   @default(false)
+  recurringFrequency  String?
+
+  // Relations
+  teamLead            TeamLead?
+  teamMembers         TeamMember[]
+  metrics             Metrics?
+  tags                ProjectTag[]
+  teams               Team[]
+  tasks               Task[]
+  
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([status])
+  @@index([priority])
+  @@index([teamID])
+  @@map("projects")
+}
+
+model ProjectTag {
+  id        String  @id @default(uuid())
+  tag       String
+
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("project_tags")
+}
+
+model TeamLead {
+  id          String   @id @default(uuid())
+  leadId      String   // USER-001
+  name        String   // 'You'
+  avatar      String   // 'YU'
+  avatarColor String   // '#4361ee'
+  
+  projectId   String   @unique
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  @@map("team_leads")
+}
+
+model TeamMember {
+  id          String   @id @default(uuid())
+  memberId    String   // USER-001, USER-002
+  name        String   // 'Rahul Kumar', 'Sneha Patel'
+  avatar      String   // 'RK', 'SP'
+  avatarColor String   // '#4361ee'
+  role        String   // 'Owner', 'Team Member'
+  status      String   @default("online") // 'online', 'offline'
+  
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  @@map("team_members")
+}
+
+model Metrics {
+  id                    String   @id @default(uuid())
+  completionPercentage  Int      @default(0)
+  tasksTotal            Int      @default(0)
+  tasksCompleted        Int      @default(0)
+  tasksInProgress       Int      @default(0)
+  tasksOverdue          Int      @default(0)
+  
+  projectId             String   @unique
+  project               Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  @@map("metrics")
+}
+
+// ============================================
+// WORKSPACE VIEW - TASK MANAGEMENT
+// ============================================
+
+model Task {
+  id                   String    @id @default(uuid())
+  taskID               String    @unique         // TASK-101, TASK-102
+  taskName             String
+  taskDescription      String?
+  status               String    @default("todo") // 'todo', 'in-progress', 'completed', 'overdue'
+  priority             String                     // 'critical', 'medium', 'low'
+  isRecurring          Boolean   @default(false)
+  recurringFrequency   String?                    // 'Daily', 'Weekly', etc.
+
+  createdAt            DateTime  @default(now())
+  dueDate              DateTime
+  completedDate        DateTime?
+
+  // Links back to the project this task belongs to
+  projectId            String
+  project              Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  // Assignees (simple string list stored as JSON-like relation)
+  assignees            TaskAssignee[]
+
+  @@index([projectId])
+  @@index([status])
+  @@index([dueDate])
+  @@map("tasks")
+}
+
+model TaskAssignee {
+  id          String @id @default(uuid())
+  name        String
+  avatar      String @default("")
+  avatarColor String @default("#4361ee")
+
+  taskId      String
+  task        Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@map("task_assignees")
+}
+
+// ============================================
+// TEAMS — First-class entities per project
+// ============================================
+
+model Team {
+  id        String           @id @default(uuid())
+  teamID    String           @unique     // e.g. BCT-001, TEAM-001
+  teamName  String
+  createdAt DateTime         @default(now())
+
+  projectId String
+  project   Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  members   TeamParticipant[]
+
+  @@map("teams")
+}
+
+model TeamParticipant {
+  id     String @id @default(uuid())
+  name   String
+  avatar String
+  color  String @default("#4361ee")
+
+  teamId String
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@map("team_participants")
+}

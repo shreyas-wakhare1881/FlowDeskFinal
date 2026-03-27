@@ -1,0 +1,315 @@
+@import "tailwindcss";
+
+/* ── Base font size: 14px gives ~87.5% compact scale (no zoom/scale needed) */
+html {
+  font-size: 14px;
+}
+
+/* ── FlowDesk Design Tokens ───────────────────────────────────────── */
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+
+  /* Accent (Royal Indigo — consistent with existing #4361ee palette) */
+  --fd-accent:        #4361ee;
+  --fd-accent-hover:  #3651ce;
+  --fd-accent-light:  #eff3ff;
+  --fd-accent-muted:  rgba(67, 97, 238, 0.12);
+
+  /* Surfaces & borders */
+  --fd-bg:            #f4f6fb;
+  --fd-surface:       rgba(255, 255, 255, 0.80);
+  --fd-border:        #e8ecf0;
+
+  /* Text */
+  --fd-text-primary:   #1a1a2e;
+  --fd-text-secondary: #7a828c;
+
+  /* Shadows (glassmorphism cards) */
+  --fd-shadow-card:  0 2px 12px rgba(67, 97, 238, 0.07);
+  --fd-shadow-hover: 0 8px 28px rgba(67, 97, 238, 0.18);
+
+  /* Shape */
+  --fd-radius: 14px;
+
+  /* Typography — Inter (loaded via Next.js) / Poppins fallback */
+  --fd-font:       var(--font-inter, 'Inter', 'Poppins', system-ui, sans-serif);
+  --fd-fs-heading: 1.5rem;
+  --fd-fs-subtitle: 1rem;
+  --fd-fs-body:    0.85rem;
+  --fd-fs-caption: 0.75rem;
+
+  /* 4 px spacing grid */
+  --fd-space-1: 4px;
+  --fd-space-2: 8px;
+  --fd-space-3: 12px;
+  --fd-space-4: 16px;
+  --fd-space-6: 24px;
+  --fd-space-8: 32px;
+
+  /* ── Premium Project Card design tokens (pc-*) ───────────────── */
+  --pc-bg:                  #ffffff;
+  --pc-border:              #e0e6ed;
+  --pc-radius-card:         12px;
+  --pc-shadow:              0 2px 10px rgba(0, 0, 0, 0.06);
+  --pc-shadow-hover:        0 8px 24px rgba(0, 0, 0, 0.12);
+  --pc-title-color:         #2c3e50;
+  --pc-label-color:         #a0aab4;
+  --pc-value-color:         #2c3e50;
+  --pc-meta-value-color:    #4a5568;
+  --pc-meta-icon-color:     #a0aab4;
+  --pc-avatar-blue:         #4361ee;
+  --pc-divider:             #eef0f4;
+  /* Priority */
+  --pc-critical:            #ef233c;
+  --pc-medium:              #f97316;
+  --pc-low:                 #3a86ff;
+  /* Status badges */
+  --pc-status-prog-bg:      #eff5ff;
+  --pc-status-prog-text:    #3a86ff;
+  --pc-status-review-bg:    #fff0f2;
+  --pc-status-review-text:  #ef233c;
+  --pc-status-done-bg:      #e8fdf6;
+  --pc-status-done-text:    #06b47e;
+  --pc-status-overdue-bg:   #fff8e1;
+  --pc-status-overdue-text: #b45309;
+
+  /* Priority chip light backgrounds */
+  --pc-medium-light:  #fff4ec;
+  --pc-low-light:     #eff5ff;
+  --pc-critical-light: var(--pc-status-review-bg);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--fd-font, Inter, Poppins, system-ui, sans-serif);
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slideIn {
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes floatParticle {
+  from { transform: translateY(0px) translateX(0px); }
+  to   { transform: translateY(-12px) translateX(6px); }
+}
+
+@keyframes shimmer {
+  from { background-position: 200% center; }
+  to   { background-position: -200% center; }
+}
+
+@keyframes dotPulse {
+  0%, 100% { transform: scale(1); opacity: 0.4; }
+  50%       { transform: scale(1.6); opacity: 1; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Premium Project Card  (.pc-*)
+   All colors come from :root  --pc-*  variables above — no hardcoding
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Card shell ─────────────────────────────────────────────────── */
+.pc-card {
+  background: var(--pc-bg);
+  border: 1px solid var(--pc-border);
+  border-radius: var(--pc-radius-card);
+  padding: 16px 18px 16px;
+  box-shadow: var(--pc-shadow);
+  cursor: pointer;
+  transition: box-shadow 0.25s ease, transform 0.25s ease;
+  font-family: var(--fd-font, Inter, Poppins, sans-serif);
+  overflow: hidden;
+  /* equal-height flex column so footer always anchors to bottom */
+  display: flex;
+  flex-direction: column;
+}
+.pc-card:hover {
+  box-shadow: var(--pc-shadow-hover);
+  transform: translateY(-3px);
+}
+
+/* ── Info Icon (top-right corner) hover effect ──────────────────── */
+.info-icon-hover:hover {
+  background: var(--pc-label-color) !important;
+  border-color: var(--pc-label-color) !important;
+  transform: scale(1.08);
+}
+.info-icon-hover:hover svg {
+  color: white !important;
+}
+
+/* ── Header: title + status badge ──────────────────────────────── */
+.pc-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.pc-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--pc-title-color);
+  line-height: 1.35;
+  flex: 1;
+  min-width: 0;
+}
+.pc-status-badge {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 20px;
+  white-space: nowrap;
+  letter-spacing: 0.3px;
+}
+
+/* ── Thin horizontal divider ────────────────────────────────────── */
+.pc-divider {
+  height: 1px;
+  background: var(--pc-divider);
+  margin: 12px 0;
+}
+
+/* ── Info rows (TEAM / ASSIGNEE) ────────────────────────────────── */
+.pc-info-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.pc-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--pc-label-color);
+  letter-spacing: 0.9px;
+  text-transform: uppercase;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.pc-value {
+  font-size: 0.83rem;
+  font-weight: 500;
+  color: var(--pc-value-color);
+  text-align: right;
+}
+
+/* Assignee: avatar + name grouped on the right */
+.pc-assignee-right {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.pc-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+  letter-spacing: 0.3px;
+}
+
+/* ── 3-column metadata grid (card footer — always at bottom) ────── */
+.pc-meta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+  margin-top: auto;       /* pushes footer to card bottom */
+  padding-top: 12px;
+  border-top: 1px solid var(--pc-divider);
+}
+.pc-meta-col {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.pc-meta-center {
+  align-items: center;
+  text-align: center;
+}
+.pc-meta-right {
+  align-items: flex-end;
+  text-align: right;
+}
+.pc-meta-icon-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--pc-meta-icon-color);
+}
+.pc-meta-label {
+  font-size: 0.69rem;
+  font-weight: 700;
+  color: var(--pc-label-color);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  white-space: nowrap;
+}
+.pc-meta-value {
+  font-size: 0.80rem;
+  font-weight: 600;
+  color: var(--pc-meta-value-color);
+  white-space: nowrap;
+}
+
+/* ── Priority row: dot + text ───────────────────────────────────── */
+.pc-priority-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.pc-priority-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
