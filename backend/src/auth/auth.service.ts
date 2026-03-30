@@ -31,11 +31,10 @@ export class AuthService {
         email: dto.email,
         name: dto.name,
         passwordHash,
-        role: dto.role ?? 'member',
       },
     });
 
-    return this.signToken(user);
+    return this.signToken({ id: user.id, email: user.email, name: user.name });
   }
 
   async login(dto: LoginDto) {
@@ -52,15 +51,28 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    return this.signToken(user);
+    return this.signToken({ id: user.id, email: user.email, name: user.name });
   }
 
-  private signToken(user: { id: string; email: string; name: string; role: string }) {
+  /**
+   * Returns current user profile without any role field.
+   * Role is project-scoped — use GET /projects/:id/permissions instead.
+   */
+  async getMe(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, name: true, createdAt: true },
+    });
+    if (!user) throw new UnauthorizedException('User not found');
+    return user;
+  }
+
+  private signToken(user: { id: string; email: string; name: string }) {
     const payload: JwtPayload = {
       sub: user.id,
       email: user.email,
       name: user.name,
-      role: user.role,
+      // role intentionally omitted — roles are project-scoped, resolved from DB
     };
 
     return {
@@ -69,8 +81,9 @@ export class AuthService {
         id: user.id,
         email: user.email,
         name: user.name,
-        role: user.role,
+        // role intentionally omitted from response — use GET /projects/:id/permissions
       },
     };
   }
 }
+

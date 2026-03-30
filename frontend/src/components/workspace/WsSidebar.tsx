@@ -34,32 +34,6 @@ const wsNavItems = [
       </svg>
     ),
   },
-  {
-    label: 'All Teams', slug: 'ws-teams',
-    icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
-        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-      </svg>
-    ),
-  },
-  {
-    label: 'Insights', slug: 'ws-insights',
-    icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/>
-        <line x1="6" y1="20" x2="6" y2="14"/>
-      </svg>
-    ),
-  },
-  {
-    label: 'Discussions', slug: 'ws-discussions',
-    icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-      </svg>
-    ),
-  },
 ];
 
 export default function WsSidebar({ projectId, projectName }: WsSidebarProps) {
@@ -89,7 +63,7 @@ export default function WsSidebar({ projectId, projectName }: WsSidebarProps) {
 
       {/* Navigation */}
       <div className="flex-1 py-3 px-3 flex flex-col gap-0.5">
-        {wsNavItems.slice(0, 3).map((item) => {
+        {wsNavItems.map((item) => {
           const path = `${basePath}/${item.slug}`;
           const isActive = pathname === path;
           return (
@@ -114,33 +88,7 @@ export default function WsSidebar({ projectId, projectName }: WsSidebarProps) {
           );
         })}
 
-        {/* Divider */}
-        <div className="my-2 border-t border-white/5" />
 
-        {wsNavItems.slice(3).map((item) => {
-          const path = `${basePath}/${item.slug}`;
-          const isActive = pathname === path;
-          return (
-            <button
-              key={item.slug}
-              onClick={() => router.push(path)}
-              className={`group relative w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 overflow-hidden
-                ${isActive
-                  ? 'bg-white/10 text-white'
-                  : 'text-white/60 hover:bg-white/5 hover:text-white'
-                }`}
-            >
-              {isActive && (
-                <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-blue-400 rounded-full" />
-              )}
-              {!isActive && (
-                <span className="absolute bottom-0 left-0 h-[2px] w-full bg-blue-400 origin-left scale-x-0 group-hover:scale-x-100 transition-transform duration-250" />
-              )}
-              <span className={isActive ? 'text-blue-400' : ''}>{item.icon}</span>
-              <span>{item.label}</span>
-            </button>
-          );
-        })}
       </div>
 
       {/* Bottom */}

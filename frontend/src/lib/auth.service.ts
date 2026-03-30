@@ -5,7 +5,8 @@ export interface AuthUser {
   id: string;
   email: string;
   name: string;
-  role: string;
+  // role intentionally removed — roles are project-scoped.
+  // Use GET /projects/:id/permissions to get the user's permissions.
 }
 
 export interface AuthResponse {
@@ -27,9 +28,10 @@ export const authService = {
     }
 
     const data: AuthResponse = await res.json();
-    // Store token
+    // Store token and fire storage event so ProjectsContext refreshes on same tab
     localStorage.setItem('access_token', data.access_token);
     localStorage.setItem('auth_user', JSON.stringify(data.user));
+    window.dispatchEvent(new Event('storage'));
     return data;
   },
 
@@ -58,6 +60,7 @@ export const authService = {
   logout() {
     localStorage.removeItem('access_token');
     localStorage.removeItem('auth_user');
+    window.dispatchEvent(new Event('storage'));
   },
 
   getToken(): string | null {

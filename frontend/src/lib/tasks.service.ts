@@ -47,8 +47,12 @@ export const tasksService = {
     return api.put<Task>(`${BASE}/${id}`, dto);
   },
 
-  /** DELETE /api/tasks/:id */
-  delete(id: string): Promise<{ message: string }> {
-    return api.delete<{ message: string }>(`${BASE}/${id}`);
+  /**
+   * DELETE /api/tasks/:id?projectId=<uuid>
+   * projectId is required — PermissionGuard resolves it from the query string
+   * since DELETE requests do not carry a body.
+   */
+  delete(id: string, projectId: string): Promise<{ message: string }> {
+    return api.delete<{ message: string }>(`${BASE}/${id}`, { projectId });
   },
 };

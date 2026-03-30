@@ -101,21 +101,54 @@ const ProjectsContext = createContext<ProjectsCtx | null>(null);
 export function ProjectsProvider({ children }: { children: React.ReactNode }) {
   const [projects, setProjects] = useState<MockProject[]>([]);
   const [loading, setLoading] = useState(true);
+  // Track which user's projects are currently loaded.
+  // When this changes (login / logout / user switch), trigger a fresh fetch.
+  const [tokenKey, setTokenKey] = useState<string | null>(null);
 
   const fetchProjects = useCallback(async () => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+    if (!token) {
+      // Not logged in — clear projects immediately
+      setProjects([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
     try {
-      const data = await projectsService.getAll();
+      // Phase 3 RBAC: only fetch projects where the current user has a role
+      const data = await projectsService.getMyProjects();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       setProjects((data as any[]).map(mapApiToMock));
     } catch {
-      // Backend not running — keep whatever is in state (empty on first load)
       setProjects([]);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => { fetchProjects(); }, [fetchProjects]);
+  // Re-fetch whenever the stored token changes (login, logout, user switch).
+  // Uses a storage event listener so it works across tabs too.
+  useEffect(() => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+    setTokenKey(token);
+  }, []);
+
+  useEffect(() => {
+    const handleStorage = () => {
+      const token = localStorage.getItem('access_token');
+      setTokenKey(token);
+    };
+    window.addEventListener('storage', handleStorage);
+    // Also poll on focus — catches same-tab login/logout
+    window.addEventListener('focus', handleStorage);
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('focus', handleStorage);
+    };
+  }, []);
+
+  // Fetch whenever tokenKey changes
+  useEffect(() => { fetchProjects(); }, [fetchProjects, tokenKey]);
 
   const addProject = (p: MockProject) =>
     setProjects(prev => [p, ...prev]);

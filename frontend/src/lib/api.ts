@@ -7,6 +7,18 @@ export class APIError extends Error {
   }
 }
 
+/**
+ * Thrown when the server returns 403 Forbidden.
+ * Catch this in components to show <AccessDenied /> instead of a generic error.
+ */
+export class PermissionError extends Error {
+  readonly status = 403;
+  constructor(message = 'You do not have permission to perform this action') {
+    super(message);
+    this.name = 'PermissionError';
+  }
+}
+
 function getAuthHeaders(): Record<string, string> {
   const token =
     typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
@@ -15,6 +27,11 @@ function getAuthHeaders(): Record<string, string> {
 
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
+    // Throw a specific PermissionError for 403 so UI can show <AccessDenied />
+    if (response.status === 403) {
+      const body = await response.json().catch(() => ({}));
+      throw new PermissionError(body?.message ?? 'Access denied');
+    }
     const error = await response.text();
     throw new APIError(response.status, error || response.statusText);
   }
@@ -63,8 +80,18 @@ export const api = {
     return handleResponse<T>(response);
   },
 
-  delete: async <T>(endpoint: string): Promise<T> => {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+  /**
+   * DELETE request.
+   * @param endpoint  API path, e.g. '/tasks/uuid'
+   * @param params    Optional query params appended to the URL.
+   *                  Use this to pass projectId for PermissionGuard:
+   *                  api.delete('/tasks/uuid', { projectId: 'proj-uuid' })
+   */
+  delete: async <T>(endpoint: string, params?: Record<string, string>): Promise<T> => {
+    const url = params
+      ? `${API_BASE_URL}${endpoint}?${new URLSearchParams(params).toString()}`
+      : `${API_BASE_URL}${endpoint}`;
+    const response = await fetch(url, {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',

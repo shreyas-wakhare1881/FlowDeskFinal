@@ -6,6 +6,13 @@ export interface PaginatedResponse<T> {
   meta: { total: number; page: number; limit: number; totalPages: number };
 }
 
+/** Shape returned by GET /projects/:id/permissions */
+export interface ProjectPermissions {
+  projectId: string;
+  role: string | null;
+  permissions: string[];
+}
+
 export const projectsService = {
   /**
    * Get all projects (unpaginated — returns full array for backward compat)
@@ -62,5 +69,26 @@ export const projectsService = {
    */
   delete: async (id: string): Promise<void> => {
     return api.delete<void>(`/projects/${id}`);
+  },
+
+  // ── RBAC Methods (Phase 3) ─────────────────────────────────────────────────
+
+  /**
+   * Get only the projects where the current user has a role.
+   * Replaces getAll() for the main dashboard view.
+   * Calls: GET /projects/my
+   */
+  getMyProjects: async (): Promise<Project[]> => {
+    const res = await api.get<{ data: Project[]; meta: { total: number } }>('/projects/my');
+    return res.data;
+  },
+
+  /**
+   * Get the current user's role + flat permission list for a specific project.
+   * Call this when a user opens a project workspace.
+   * Calls: GET /projects/:id/permissions
+   */
+  getPermissions: async (projectId: string): Promise<ProjectPermissions> => {
+    return api.get<ProjectPermissions>(`/projects/${projectId}/permissions`);
   },
 };

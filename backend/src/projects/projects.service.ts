@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProjectDto, UpdateProjectDto } from './dto/project.dto';
 
@@ -15,7 +15,12 @@ const FULL_INCLUDE = {
 export class ProjectsService {
   constructor(private prisma: PrismaService) {}
 
-  async create(createProjectDto: CreateProjectDto) {
+  /**
+   * Create a new project.
+   * If createdById is provided (Phase 2+), the creator is automatically
+   * assigned the Manager role in user_roles for this project.
+   */
+  async create(createProjectDto: CreateProjectDto, createdById?: string) {
     // Generate unique project ID
     const projectCount = await this.prisma.project.count();
     const projectNumber = String(projectCount + 1).padStart(3, '0');
@@ -41,6 +46,8 @@ export class ProjectsService {
         assigneeAvatarColor: createProjectDto.assigneeAvatarColor ?? '#4361ee',
         isRecurring: createProjectDto.isRecurring || false,
         recurringFrequency: createProjectDto.recurringFrequency,
+        // Phase 2: set project ownership
+        ...(createdById ? { createdById } : {}),
         tags: createProjectDto.tags?.length
           ? { create: createProjectDto.tags.map((tag) => ({ tag })) }
           : undefined,
@@ -80,6 +87,29 @@ export class ProjectsService {
       },
       include: FULL_INCLUDE,
     });
+
+    // Phase 2: auto-assign creator to user_roles.
+    // SuperAdmin stays SuperAdmin — they must never be downgraded to Manager.
+    // Any other user (e.g. future non-SuperAdmin project creator) gets Manager.
+    if (createdById) {
+      const isSuperAdmin = await this.prisma.userRole.findFirst({
+        where: { userId: createdById, role: { name: 'SuperAdmin' } },
+        include: { role: true },
+      });
+
+      const roleName = isSuperAdmin ? 'SuperAdmin' : 'Manager';
+      const assignedRole = await this.prisma.role.findUnique({ where: { name: roleName } });
+
+      if (assignedRole) {
+        await this.prisma.userRole.create({
+          data: {
+            userId: createdById,
+            roleId: assignedRole.id,
+            projectId: project.id,
+          },
+        });
+      }
+    }
 
     return project;
   }
@@ -176,6 +206,19 @@ export class ProjectsService {
     });
   }
 
+  /**
+   * GET /projects/roles
+   * Returns roles that can be assigned by Manager or SuperAdmin.
+   * SuperAdmin role is excluded — only SuperAdmin can assign SuperAdmin (enforced in addMember).
+   */
+  async getAssignableRoles() {
+    return this.prisma.role.findMany({
+      where: { name: { in: ['Manager', 'Developer', 'Client'] } },
+      select: { id: true, name: true, description: true },
+      orderBy: { name: 'asc' },
+    });
+  }
+
   async getStats() {
     const total = await this.prisma.project.count();
     const completed = await this.prisma.project.count({
@@ -194,5 +237,177 @@ export class ProjectsService {
       inProgress,
       overdue,
     };
+  }
+
+  // ── RBAC Methods (Phase 2) ───────────────────────────────────────────────
+
+  /**
+   * GET /projects/my
+   * Returns only the projects where the requesting user has a row in user_roles.
+   */
+  async findMyProjects(userId: string) {
+    const userRoles = await this.prisma.userRole.findMany({
+      where: { userId },
+      select: { projectId: true },
+    });
+
+    const projectIds = userRoles.map((ur) => ur.projectId);
+    if (projectIds.length === 0) return { data: [], meta: { total: 0 } };
+
+    const data = await this.prisma.project.findMany({
+      where: { id: { in: projectIds } },
+      include: FULL_INCLUDE,
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return { data, meta: { total: data.length } };
+  }
+
+  /**
+   * GET /projects/:id/permissions
+   * Returns the current user's role name + flat permission list for a project.
+   */
+  async getMyPermissions(projectIdOrCode: string, userId: string) {
+    // Resolve — accept both UUID and short code (e.g. PRJ-009)
+    const resolvedProject = await this.prisma.project.findFirst({
+      where: { OR: [{ id: projectIdOrCode }, { projectID: projectIdOrCode }] },
+      select: { id: true },
+    });
+    const projectId = resolvedProject?.id ?? projectIdOrCode;
+
+    const userRole = await this.prisma.userRole.findFirst({
+      where: { userId, projectId },
+      include: {
+        role: {
+          include: {
+            rolePermissions: {
+              include: { permission: true },
+            },
+          },
+        },
+      },
+    });
+
+    if (!userRole) {
+      // User is not a member — return empty with no role
+      return { projectId, role: null, permissions: [] };
+    }
+
+    // SuperAdmin bypass — mirrors PermissionGuard backend logic.
+    // SuperAdmin's DB role_permissions only list MANAGE_* entries, but they
+    // bypass ALL permission checks on the backend. Return every permission so
+    // the frontend doesn't incorrectly block access on granular checks like
+    // permissions.includes('CREATE_TASK').
+    if (userRole.role.name === 'SuperAdmin') {
+      const allPermissions = await this.prisma.permission.findMany({
+        select: { name: true },
+      });
+      return {
+        projectId,
+        role: 'SuperAdmin',
+        permissions: allPermissions.map((p) => p.name),
+      };
+    }
+
+    const permissions = userRole.role.rolePermissions.map(
+      (rp) => rp.permission.name,
+    );
+
+    return {
+      projectId,
+      role: userRole.role.name,
+      permissions,
+    };
+  }
+
+  /**
+   * GET /projects/:id/members
+   * Lists all members of a project with their assigned roles.
+   */
+  async getMembers(projectId: string) {
+    await this.findOne(projectId); // ensures project exists
+
+    const members = await this.prisma.userRole.findMany({
+      where: { projectId },
+      include: {
+        user: { select: { id: true, name: true, email: true } },
+        role: { select: { id: true, name: true } },
+      },
+    });
+
+    return members.map((m) => ({
+      userId: m.userId,
+      name: m.user.name,
+      email: m.user.email,
+      roleId: m.role.id,
+      roleName: m.role.name,
+      assignedAt: m.assignedAt,
+    }));
+  }
+
+  /**
+   * POST /projects/:id/members
+   * Adds a user to a project with the given role.
+   */
+  async addMember(
+    projectId: string,
+    targetUserId: string,
+    roleId: string,
+    assignedById: string,
+  ) {
+    await this.findOne(projectId); // ensures project exists
+
+    const userExists = await this.prisma.user.findUnique({ where: { id: targetUserId } });
+    if (!userExists) throw new NotFoundException(`User ${targetUserId} not found`);
+
+    const roleExists = await this.prisma.role.findUnique({ where: { id: roleId } });
+    if (!roleExists) throw new NotFoundException(`Role ${roleId} not found`);
+
+    // Security: only SuperAdmin can assign the SuperAdmin role.
+    // A Manager calling this endpoint must not be able to escalate any user.
+    if (roleExists.name === 'SuperAdmin') {
+      const callerRole = await this.prisma.userRole.findFirst({
+        where: { userId: assignedById, role: { name: 'SuperAdmin' } },
+        include: { role: true },
+      });
+      if (!callerRole) {
+        throw new ForbiddenException('Only SuperAdmin can assign the SuperAdmin role');
+      }
+    }
+
+    // Check for duplicate — one role per user per project
+    const existing = await this.prisma.userRole.findFirst({
+      where: { userId: targetUserId, projectId },
+    });
+    if (existing) {
+      throw new ConflictException('User already has a role in this project');
+    }
+
+    return this.prisma.userRole.create({
+      data: { userId: targetUserId, roleId, projectId, assignedById },
+      include: {
+        user: { select: { id: true, name: true, email: true } },
+        role: { select: { id: true, name: true } },
+      },
+    });
+  }
+
+  /**
+   * DELETE /projects/:id/members/:userId
+   * Removes a user's role assignment from a project.
+   */
+  async removeMember(projectId: string, targetUserId: string) {
+    const existing = await this.prisma.userRole.findFirst({
+      where: { userId: targetUserId, projectId },
+    });
+    if (!existing) {
+      throw new NotFoundException('User is not a member of this project');
+    }
+
+    await this.prisma.userRole.deleteMany({
+      where: { userId: targetUserId, projectId },
+    });
+
+    return { message: 'Member removed successfully' };
   }
 }

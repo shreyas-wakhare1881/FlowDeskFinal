@@ -41,6 +41,11 @@ export interface CreateTaskDto {
 }
 
 export interface UpdateTaskDto {
+  /**
+   * Required by backend PermissionGuard to resolve project context.
+   * Always pass the projectId of the task's parent project.
+   */
+  projectId: string;
   taskName?: string;
   taskDescription?: string;
   status?: string;

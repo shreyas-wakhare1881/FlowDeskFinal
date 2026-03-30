@@ -35,6 +35,14 @@ export class CreateTaskDto {
 }
 
 export class UpdateTaskDto {
+  /**
+   * projectId MUST be passed by clients on update/delete so PermissionGuard
+   * can resolve the project context from body.projectId.
+   * (Guard cannot derive project from params.id since that is a task UUID)
+   */
+  @IsString()
+  projectId: string;
+
   @IsOptional()
   @IsString()
   taskName?: string;

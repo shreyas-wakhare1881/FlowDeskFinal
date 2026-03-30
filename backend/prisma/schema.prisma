@@ -1,6 +1,7 @@
 // PM Tool Database Schema
 // Matches exactly with current localStorage structure
 // Created: March 17, 2026
+// Updated: March 30, 2026 — Phase 1 RBAC: added roles, modules, permissions, role_permissions, user_roles
 
 generator client {
   provider = "prisma-client-js"
@@ -19,9 +20,14 @@ model User {
   email        String   @unique
   name         String
   passwordHash String
-  role         String   @default("member") // 'admin', 'member'
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  // ── RBAC relations (Phase 1) ──────────────────────────────────────
+  userRoles         UserRole[]           // roles this user holds per project
+  assignedRoles     UserRole[]  @relation("AssignedByUser")  // roles this user assigned to others
+  grantedPerms      RolePermission[]     // permission mappings this user approved
+  createdProjects   Project[]   @relation("ProjectCreator")  // projects this user created
 
   @@index([email])
   @@map("users")
@@ -59,6 +65,10 @@ model Project {
   isRecurring         Boolean   @default(false)
   recurringFrequency  String?
 
+  // ── RBAC: project ownership (Phase 1) ────────────────────────────
+  createdById         String?                           // nullable for backward compat with existing projects
+  createdBy           User?     @relation("ProjectCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
   // Relations
   teamLead            TeamLead?
   teamMembers         TeamMember[]
@@ -66,6 +76,7 @@ model Project {
   tags                ProjectTag[]
   teams               Team[]
   tasks               Task[]
+  userRoles           UserRole[]   // members + their roles in this project
   
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
@@ -198,4 +209,113 @@ model TeamParticipant {
   team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   @@map("team_participants")
+}
+
+// ============================================
+// RBAC — Phase 1 Migration (March 30, 2026)
+// Architecture: User → Role (per Project) → Permission → Module
+// All tables are ADDITIVE — existing tables are unchanged except projects.createdById
+// ============================================
+
+// ── 1. Role definitions ───────────────────────────────────────────────────────
+// Predefined: SuperAdmin, Manager, Developer, Client
+// These are templates — actual access is determined by role_permissions mapping
+
+model Role {
+  id          String   @id @default(uuid())
+  name        String   @unique    // 'SuperAdmin', 'Manager', 'Developer', 'Client'
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  rolePermissions RolePermission[]
+  userRoles       UserRole[]
+
+  @@map("roles")
+}
+
+// ── 2. Module definitions ─────────────────────────────────────────────────────
+// Represents functional areas of the app that can be access-controlled
+// Predefined: TASKS, PROJECTS, TEAMS, REPORTS, COMMENTS, USERS
+
+model Module {
+  id          String   @id @default(uuid())
+  name        String   @unique    // 'TASKS', 'PROJECTS', 'TEAMS', etc.
+  description String?
+  createdAt   DateTime @default(now())
+
+  // Relations
+  permissions Permission[]
+
+  @@map("modules")
+}
+
+// ── 3. Permission definitions ─────────────────────────────────────────────────
+// Each permission = one action on one module (e.g. CREATE_TASK = CREATE on TASKS)
+// name must follow convention: {ACTION}_{MODULE_SUBJECT}
+
+model Permission {
+  id          String   @id @default(uuid())
+  name        String   @unique    // e.g. 'CREATE_TASK', 'VIEW_PROJECT'
+  action      String              // 'CREATE' | 'READ' | 'UPDATE' | 'DELETE' | 'MANAGE'
+  description String?
+  createdAt   DateTime @default(now())
+
+  // FK to module
+  moduleId    String
+  module      Module   @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  // Relations
+  rolePermissions RolePermission[]
+
+  @@index([moduleId])
+  @@map("permissions")
+}
+
+// ── 4. Role ↔ Permission mapping (global) ────────────────────────────────────
+// Defines which permissions a role grants.
+// This is NOT project-scoped — if Manager has CREATE_TASK, it applies in all projects.
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  grantedAt    DateTime @default(now())
+
+  // Audit: who configured this mapping (nullable — seeded programmatically)
+  grantedById  String?
+  grantedBy    User?       @relation(fields: [grantedById], references: [id], onDelete: SetNull)
+
+  // Relations
+  role         Role        @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission  @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+// ── 5. User ↔ Role ↔ Project mapping (THE CORE TABLE) ────────────────────────
+// Assigns a user a specific role within a specific project.
+// One user can appear multiple times — once per project they belong to.
+// Composite PK ensures a user can only hold ONE role per project.
+
+model UserRole {
+  userId     String
+  roleId     String
+  projectId  String
+  assignedAt DateTime @default(now())
+
+  // Audit: who made the assignment (nullable — backfilled programmatically)
+  assignedById String?
+  assignedBy   User?    @relation("AssignedByUser", fields: [assignedById], references: [id], onDelete: SetNull)
+
+  // Relations
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role       Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId, projectId])
+  @@unique([userId, projectId])  // enforces one role per user per project at DB level
+  @@index([userId, projectId])   // fast lookup: "what is this user's role in this project?"
+  @@map("user_roles")
 }

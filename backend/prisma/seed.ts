@@ -236,19 +236,23 @@ const SEED_PROJECTS = [
 async function main() {
   console.log('🌱 Seeding database...');
 
-  // Seed default admin user
-  const passwordHash = await bcrypt.hash('admin123', 10);
-  await prisma.user.upsert({
-    where: { email: 'admin@flowdesk.com' },
-    update: {},
-    create: {
-      email: 'admin@flowdesk.com',
-      name: 'Shreyas Wakhare',
-      passwordHash,
-      role: 'admin',
-    },
-  });
-  console.log('✅ Default admin user seeded: admin@flowdesk.com / admin123');
+  // Seed SuperAdmin accounts
+  // These are the only accounts with global SuperAdmin privileges.
+  // All other users are created via /auth/register and start with zero roles.
+  const SUPERADMIN_ACCOUNTS = [
+    { email: 'admin@flowdesk.com',           name: 'Shreyas Wakhare',  password: 'admin123'      },
+    { email: 'superadmin@datafortune.com',   name: 'Rakteem Barooah',  password: 'superadim123'  },
+  ];
+
+  for (const account of SUPERADMIN_ACCOUNTS) {
+    const hash = await bcrypt.hash(account.password, 10);
+    await prisma.user.upsert({
+      where:  { email: account.email },
+      update: { name: account.name },
+      create: { email: account.email, name: account.name, passwordHash: hash },
+    });
+    console.log(`✅ SuperAdmin seeded: ${account.email}`);
+  }
 
   // Clear existing data (in correct order to respect FK constraints)
   await prisma.teamParticipant.deleteMany();
@@ -308,8 +312,183 @@ async function main() {
   }
 
   console.log(`\n🎉 Seed complete! ${SEED_PROJECTS.length} projects inserted.`);
-}
 
+  // ============================================================
+  // RBAC SEED — Phase 1 (March 30, 2026)
+  // Seeds: roles → modules → permissions → role_permissions
+  // Safe to re-run: uses upsert / skipDuplicates throughout
+  // ============================================================
+  console.log('\n🔐 Seeding RBAC foundation...');
+
+  // ── Step 1: Seed roles ────────────────────────────────────────
+  const ROLES = [
+    { name: 'SuperAdmin', description: 'Full system access across all projects' },
+    { name: 'Manager',    description: 'Project and task management within a project' },
+    { name: 'Developer',  description: 'Task execution and updates within a project' },
+    { name: 'Client',     description: 'Read-only visibility into a project' },
+  ];
+
+  for (const r of ROLES) {
+    await prisma.role.upsert({
+      where:  { name: r.name },
+      update: { description: r.description },
+      create: r,
+    });
+  }
+  console.log('  ✅ Roles seeded (SuperAdmin, Manager, Developer, Client)');
+
+  // ── Step 2: Seed modules ──────────────────────────────────────
+  const MODULES = [
+    { name: 'TASKS',    description: 'Task creation, assignment and status management' },
+    { name: 'PROJECTS', description: 'Project CRUD and settings' },
+    { name: 'TEAMS',    description: 'Team member management' },
+    { name: 'REPORTS',  description: 'Analytics and reporting' },
+    { name: 'COMMENTS', description: 'Task and project comments' },
+    { name: 'USERS',    description: 'User account management (SuperAdmin only)' },
+  ];
+
+  for (const m of MODULES) {
+    await prisma.module.upsert({
+      where:  { name: m.name },
+      update: { description: m.description },
+      create: m,
+    });
+  }
+  console.log('  ✅ Modules seeded (TASKS, PROJECTS, TEAMS, REPORTS, COMMENTS, USERS)');
+
+  // ── Step 3: Seed permissions ──────────────────────────────────
+  // Format: { name, action, moduleName, description }
+  const PERMISSIONS = [
+    // TASKS
+    { name: 'CREATE_TASK',    action: 'CREATE', moduleName: 'TASKS',    description: 'Create new tasks in a project' },
+    { name: 'READ_TASK',      action: 'READ',   moduleName: 'TASKS',    description: 'View tasks in a project' },
+    { name: 'UPDATE_TASK',    action: 'UPDATE', moduleName: 'TASKS',    description: 'Update task details and status' },
+    { name: 'DELETE_TASK',    action: 'DELETE', moduleName: 'TASKS',    description: 'Delete tasks from a project' },
+    { name: 'MANAGE_TASKS',   action: 'MANAGE', moduleName: 'TASKS',    description: 'Full control over all tasks' },
+    // PROJECTS — CREATE_PROJECT and DELETE_PROJECT removed (orphan: no role holds them; SuperAdmin uses MANAGE_PROJECTS)
+    { name: 'VIEW_PROJECT',   action: 'READ',   moduleName: 'PROJECTS', description: 'View project details' },
+    { name: 'UPDATE_PROJECT', action: 'UPDATE', moduleName: 'PROJECTS', description: 'Edit project name, description, settings' },
+    { name: 'MANAGE_PROJECTS',action: 'MANAGE', moduleName: 'PROJECTS', description: 'Full control over projects' },
+    // TEAMS
+    { name: 'VIEW_TEAM',      action: 'READ',   moduleName: 'TEAMS',    description: 'View team members in a project' },
+    { name: 'MANAGE_TEAM',    action: 'MANAGE', moduleName: 'TEAMS',    description: 'Add/remove team members, change roles' },
+    // REPORTS
+    { name: 'VIEW_REPORTS',   action: 'READ',   moduleName: 'REPORTS',  description: 'View project analytics and reports' },
+    // COMMENTS
+    { name: 'ADD_COMMENT',    action: 'CREATE', moduleName: 'COMMENTS', description: 'Add comments to tasks or projects' },
+    { name: 'VIEW_COMMENT',   action: 'READ',   moduleName: 'COMMENTS', description: 'View comments' },
+    { name: 'DELETE_COMMENT', action: 'DELETE', moduleName: 'COMMENTS', description: 'Delete any comment' },
+    // USERS
+    { name: 'MANAGE_USERS',   action: 'MANAGE', moduleName: 'USERS',    description: 'Create, deactivate and manage user accounts' },
+  ];
+
+  // Fetch all modules into a lookup map
+  const moduleMap = new Map<string, string>();
+  const allModules = await prisma.module.findMany();
+  for (const mod of allModules) {
+    moduleMap.set(mod.name, mod.id);
+  }
+
+  for (const p of PERMISSIONS) {
+    const moduleId = moduleMap.get(p.moduleName);
+    if (!moduleId) throw new Error(`Module not found: ${p.moduleName}`);
+    await prisma.permission.upsert({
+      where:  { name: p.name },
+      update: { action: p.action, description: p.description, moduleId },
+      create: { name: p.name, action: p.action, description: p.description, moduleId },
+    });
+  }
+  console.log(`  ✅ Permissions seeded (${PERMISSIONS.length} permissions)`);
+
+  // ── Step 4: Seed role_permissions ────────────────────────────
+  // role → list of permission names it should have
+  const ROLE_PERMISSIONS: Record<string, string[]> = {
+    SuperAdmin: [
+      'MANAGE_TASKS', 'MANAGE_PROJECTS', 'MANAGE_TEAM', 'MANAGE_USERS',
+      'VIEW_REPORTS', 'ADD_COMMENT', 'VIEW_COMMENT', 'DELETE_COMMENT',
+    ],
+    Manager: [
+      'CREATE_TASK', 'READ_TASK', 'UPDATE_TASK', 'DELETE_TASK',
+      'VIEW_PROJECT', 'UPDATE_PROJECT',
+      'VIEW_TEAM', 'MANAGE_TEAM',
+      'VIEW_REPORTS',
+      'ADD_COMMENT', 'VIEW_COMMENT', 'DELETE_COMMENT',
+    ],
+    Developer: [
+      'READ_TASK', 'UPDATE_TASK',
+      'VIEW_PROJECT',
+      'VIEW_TEAM',
+      'ADD_COMMENT', 'VIEW_COMMENT',
+    ],
+    Client: [
+      'READ_TASK',
+      'VIEW_PROJECT',
+      'VIEW_COMMENT',
+    ],
+  };
+
+  // Fetch roles and permissions into lookup maps
+  const roleMap = new Map<string, string>();
+  const allRoles = await prisma.role.findMany();
+  for (const r of allRoles) roleMap.set(r.name, r.id);
+
+  const permMap = new Map<string, string>();
+  const allPerms = await prisma.permission.findMany();
+  for (const p of allPerms) permMap.set(p.name, p.id);
+
+  for (const [roleName, permNames] of Object.entries(ROLE_PERMISSIONS)) {
+    const roleId = roleMap.get(roleName);
+    if (!roleId) throw new Error(`Role not found: ${roleName}`);
+
+    for (const permName of permNames) {
+      const permissionId = permMap.get(permName);
+      if (!permissionId) throw new Error(`Permission not found: ${permName}`);
+
+      // createMany with skipDuplicates is safest for mapping tables
+      await prisma.rolePermission.createMany({
+        data: [{ roleId, permissionId }],
+        skipDuplicates: true,
+      });
+    }
+    console.log(`  ✅ role_permissions mapped: ${roleName} (${permNames.length} permissions)`);
+  }
+
+  console.log('\n🎉 RBAC seed complete!');
+
+  // ── Step 5: Seed user_roles ───────────────────────────────────────────────
+  // Projects were deleted + recreated above (new UUIDs) so user_roles was
+  // cascade-deleted too. Re-populate it here.
+  // Admin user is seeded as SuperAdmin in every project via user_roles (RBAC).
+  console.log('\n👥 Seeding user_roles...');
+
+  // Only seed the hardcoded admin account — NOT all users.
+  // Users registered via the UI start with zero roles (empty dashboard).
+  // SuperAdmin assigns roles to them manually via POST /projects/:id/members.
+  const allProjects = await prisma.project.findMany({ select: { id: true, projectID: true } });
+
+  const superAdminRole = await prisma.role.findUnique({ where: { name: 'SuperAdmin' } });
+  if (!superAdminRole) throw new Error('SuperAdmin role not found');
+
+  // Assign SuperAdmin role in every project for every SuperAdmin account
+  const superAdminEmails = ['admin@flowdesk.com', 'superadmin@datafortune.com'];
+  let userRoleCount = 0;
+
+  for (const email of superAdminEmails) {
+    const superAdminUser = await prisma.user.findUnique({ where: { email } });
+    if (!superAdminUser) throw new Error(`${email} not found`);
+
+    for (const project of allProjects) {
+      await prisma.userRole.createMany({
+        data: [{ userId: superAdminUser.id, roleId: superAdminRole.id, projectId: project.id }],
+        skipDuplicates: true,
+      });
+      userRoleCount++;
+    }
+    console.log(`  ✅ ${email} (SuperAdmin) → ${allProjects.length} projects`);
+  }
+  console.log(`\n🎉 user_roles seeded: ${userRoleCount} rows`);
+  console.log('🚀 Full seed complete!\n');
+}
 main()
   .catch((e) => {
     console.error('❌ Seed failed:', e);

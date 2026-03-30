@@ -33,7 +33,7 @@ export const FEATURES = {
   TEAM_PULSE: false,           // Team Pulse widget on dashboard
   
   // ── Navigation Features ───────────────────────────────────────────
-  CREATE_TEAM_PAGE: false,     // Create Team tab in sidebar & page access
+  CREATE_TEAM_PAGE: true,      // Create Team tab in sidebar & page access
   
   // ── Future Feature Flags ──────────────────────────────────────────
   // Add more feature flags here as needed:

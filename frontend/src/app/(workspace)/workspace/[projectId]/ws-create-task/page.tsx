@@ -4,6 +4,8 @@ import { useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import WsSidebar from '@/components/workspace/WsSidebar';
 import WsTopbar from '@/components/workspace/WsTopbar';
+import { usePermissions } from '@/lib/hooks/usePermissions';
+import AccessDenied from '@/components/shared/AccessDenied';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -363,7 +365,10 @@ export default function WsCreateTaskPage() {
   const router = useRouter();
   const projectId = params.projectId as string;
 
-  // Form state
+  // ── RBAC (must be declared before any early return) ───────────────────────
+  const { permissions, role, loading: permLoading } = usePermissions(projectId);
+
+  // ── Form state (all hooks declared unconditionally — Rules of Hooks) ───────
   const [taskName, setTaskName] = useState('');
   const [taskDesc, setTaskDesc] = useState('');
   const [priority, setPriority] = useState<Priority | ''>('');
@@ -373,11 +378,24 @@ export default function WsCreateTaskPage() {
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurFreq, setRecurFreq] = useState<RecurFrequency | ''>('');
 
-  // UI state
+  // ── UI state ───────────────────────────────────────────────────────────────
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState('');
   const [success, setSuccess] = useState(false);
   const [createdTaskId, setCreatedTaskId] = useState('');
+
+  // ── Permission gates (after all hooks — safe to early return here) ────────
+  if (permLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center text-slate-500 text-sm">
+        Checking permissions…
+      </div>
+    );
+  }
+  if (!permissions.includes('CREATE_TASK')) {
+    return <AccessDenied requiredPermission="CREATE_TASK" role={role} />;
+  }
+  // ──────────────────────────────────────────────────────────────────────────
 
   function showToast(msg: string) {
     setToast(msg);
