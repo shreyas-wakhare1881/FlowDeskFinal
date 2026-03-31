@@ -419,22 +419,26 @@ SuperAdmin operates globally — not scoped to a single project. This is the onl
 
 ### Manager — in Project Alpha
 
-**Flow:** `Priya (Manager in Project Alpha)` → Project + Task control → PROJECTS, TASKS, TEAMS, COMMENTS
+**Flow:** `Priya (Manager in Project Alpha)` → Full control (project-scoped) → ALL MODULES
 
 Priya is assigned the `Manager` role **only for Project Alpha**. In Project Beta, she may be a Developer.
 
+> **Manager role now mirrors SuperAdmin permissions within the assigned project.**
+> - SuperAdmin → global scope (all projects)
+> - Manager → full control, scoped to their assigned project only
+>
+> **Special rule on project deletion:** Manager can delete only projects **they created**. They cannot delete projects created by SuperAdmin or other users.
+
 | Permission | Module |
 |---|---|
-| CREATE_PROJECT | PROJECTS |
-| UPDATE_PROJECT | PROJECTS |
-| VIEW_PROJECT | PROJECTS |
-| CREATE_TASK | TASKS |
-| UPDATE_TASK | TASKS |
-| DELETE_TASK | TASKS |
-| READ_TASK | TASKS |
+| MANAGE_TASKS | TASKS |
+| MANAGE_PROJECTS | PROJECTS |
+| MANAGE_USERS | USERS |
 | MANAGE_TEAM | TEAMS |
 | VIEW_REPORTS | REPORTS |
 | ADD_COMMENT | COMMENTS |
+| VIEW_COMMENT | COMMENTS |
+| DELETE_COMMENT | COMMENTS |
 
 ---
 
@@ -487,7 +491,7 @@ The client can only view progress — no write access at all.
 | Role | Scope | Modules Accessible | Access Level |
 |---|---|---|---|
 | SuperAdmin | Global | All | Full CRUD + Manage |
-| Manager | Per Project | Projects, Tasks, Teams, Reports | Create, Update, Delete, Read |
+| Manager | Per Project | All (same as SuperAdmin, project-scoped) | Full CRUD + Manage (own projects only for delete) |
 | Developer | Per Project | Tasks, Projects (view), Comments | Read + Update Tasks |
 | Client | Per Project | Projects, Tasks, Comments | Read Only |
 

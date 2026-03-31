@@ -2,6 +2,8 @@
 
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
+import { useCurrentUser } from '@/lib/hooks/useCurrentUser';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 
 interface WsSidebarProps {
   projectId: string;
@@ -39,6 +41,9 @@ const wsNavItems = [
 export default function WsSidebar({ projectId, projectName }: WsSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const currentUser = useCurrentUser();
+  // Fetch project-scoped permissions to gate workspace nav items
+  const { permissions, loading: permLoading } = usePermissions(projectId);
 
   const basePath = `/workspace/${projectId}`;
 
@@ -63,7 +68,18 @@ export default function WsSidebar({ projectId, projectName }: WsSidebarProps) {
 
       {/* Navigation */}
       <div className="flex-1 py-3 px-3 flex flex-col gap-0.5">
-        {wsNavItems.map((item) => {
+        {wsNavItems
+          .filter((item) => {
+            // Hide 'Create Task' nav entry for roles that lack CREATE_TASK permission.
+            // While loading we keep it visible to avoid layout flicker.
+            if (
+              item.slug === 'ws-create-task' &&
+              !permLoading &&
+              !permissions.includes('CREATE_TASK')
+            ) return false;
+            return true;
+          })
+          .map((item) => {
           const path = `${basePath}/${item.slug}`;
           const isActive = pathname === path;
           return (
@@ -107,11 +123,11 @@ export default function WsSidebar({ projectId, projectName }: WsSidebarProps) {
         {/* User Profile */}
         <div className="flex items-center gap-3 px-1">
           <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-blue-600 rounded-lg flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-            SW
+            {currentUser.initials}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-white text-xs font-semibold truncate">Shreyas W.</div>
-            <div className="text-white/40 text-[10px]">Team Lead</div>
+            <div className="text-white text-xs font-semibold truncate">{currentUser.shortName}</div>
+            <div className="text-white/40 text-[10px]">{currentUser.email || 'Team Lead'}</div>
           </div>
         </div>
       </div>

@@ -5,20 +5,17 @@ import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/shared/Sidebar';
 import Topbar from '@/components/shared/Topbar';
 import ViewSwitcher from '@/components/view/ViewSwitcher';
-import KanbanBoard from '@/components/view/KanbanBoard';
 import TableView from '@/components/view/TableView';
 import ProgressView from '@/components/view/ProgressView';
 
+
 export default function ViewPage() {
   const router = useRouter();
-  const [activeView, setActiveView] = useState('kanban');
+  const [activeView, setActiveView] = useState('table');
 
   return (
-    <div className="flex h-screen bg-slate-50 overflow-hidden">
-      <Sidebar />
-      
-      <div className="flex-1 flex flex-col overflow-hidden md:ml-[200px]">
-        <Topbar 
+    <div className="flex flex-col h-screen bg-slate-50 overflow-hidden">
+      <Topbar 
           title="" 
           breadcrumb={
             <div className="text-sm text-slate-500">
@@ -30,7 +27,8 @@ export default function ViewPage() {
             </div>
           }
         />
-        
+      <div className="flex flex-1 overflow-hidden">
+        <Sidebar />
         <main className="flex-1 overflow-auto p-8">
           {/* Page Header */}
           <div className="mb-6">
@@ -41,7 +39,7 @@ export default function ViewPage() {
                   <span>👁️</span> Projects Views
                 </h2>
                 <p className="text-slate-600 ml-[52px] pl-2">
-                  Switch between Kanban, Table, and Progress
+                  Switch between Table and Progress
                 </p>
               </div>
               <ViewSwitcher activeView={activeView} onViewChange={setActiveView} />
@@ -50,7 +48,6 @@ export default function ViewPage() {
 
           {/* View Panels */}
           <div className="animate-fadeIn">
-            {activeView === 'kanban' && <KanbanBoard />}
             {activeView === 'table' && <TableView />}
             {activeView === 'progress' && <ProgressView />}
           </div>

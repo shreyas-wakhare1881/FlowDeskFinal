@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/shared/Sidebar';
 import Topbar from '@/components/shared/Topbar';
@@ -9,9 +9,16 @@ import PrioritySelector from '@/components/create/PrioritySelector';
 import ClientInfo from '@/components/create/ClientInfo';
 import FileUpload from '@/components/create/FileUpload';
 import LiveSummary from '@/components/create/LiveSummary';
+import TeamAssignment from '@/components/create/TeamAssignment';
+import type { MemberWithRole, AssignableRole } from '@/components/create/TeamAssignment';
 import { projectsService } from '@/lib/projects.service';
 import type { CreateProjectDto } from '@/types/project';
 import { useProjects } from '@/lib/ProjectsContext';
+import { useCurrentUser } from '@/lib/hooks/useCurrentUser';
+import { useRbac } from '@/lib/RbacContext';
+import AccessDenied from '@/components/shared/AccessDenied';
+import { usersService, type SystemUser } from '@/lib/users.service';
+
 
 type Priority = 'critical' | 'medium' | 'low' | '';
 
@@ -31,6 +38,8 @@ const MEMBER_COLORS: Record<string, string> = {
 export default function CreateProjectPage() {
   const router = useRouter();
   const { addProject } = useProjects();
+  const currentUser = useCurrentUser();
+  const { canManage, noProjects, loading: rbacLoading } = useRbac();
   const [projectName, setProjectName] = useState('');
   const [projectDescription, setProjectDescription] = useState('');
   const [priority, setPriority] = useState<Priority>('');
@@ -46,6 +55,30 @@ export default function CreateProjectPage() {
   const [clientContact, setClientContact] = useState('');
   const [clientTimezone, setClientTimezone] = useState('');
   const [isInternalProject, setIsInternalProject] = useState(false);
+
+  // Team assignment state
+  const [systemUsers, setSystemUsers] = useState<SystemUser[]>([]);
+  const [assignableRoles, setAssignableRoles] = useState<AssignableRole[]>([]);
+  const [membersWithRoles, setMembersWithRoles] = useState<MemberWithRole[]>([]);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [users, roles] = await Promise.all([
+          usersService.getAll(),
+          projectsService.getRoles(),
+        ]);
+        setSystemUsers(users);
+        // Only expose Manager and Developer (not SuperAdmin, not Client)
+        setAssignableRoles(
+          roles.filter((r) => r.name === 'Manager' || r.name === 'Developer'),
+        );
+      } catch {
+        // non-critical — form still works without pre-loaded users
+      }
+    };
+    load();
+  }, []);
 
 
   const validateForm = () => {
@@ -73,15 +106,15 @@ export default function CreateProjectPage() {
         priority,
         category: 'General',
         assignedDate: new Date().toISOString(),
-        dueDate: deadline ? new Date(deadline).toISOString() : null,
+        dueDate: deadline ? new Date(deadline).toISOString() : undefined,
         teamID: '',
         teamName: 'Unassigned',
-        assigneeID: 'USER-001',
-        assigneeName: 'Shreyas Wakhare',
-        assigneeAvatar: 'SW',
+        assigneeID: currentUser.id || 'USER-001',
+        assigneeName: currentUser.name,
+        assigneeAvatar: currentUser.initials,
         assigneeAvatarColor: '#4361ee',
         tags: priority ? [priority.charAt(0).toUpperCase() + priority.slice(1)] : [],
-        teamLead: { leadId: 'USER-001', name: 'Shreyas Wakhare', avatar: 'SW', avatarColor: '#4361ee' },
+        teamLead: { leadId: currentUser.id || 'USER-001', name: currentUser.name, avatar: currentUser.initials, avatarColor: '#4361ee' },
         teamMembers: [],
         metrics: { completionPercentage: 0, tasksTotal: 0, tasksCompleted: 0, tasksInProgress: 0, tasksOverdue: 0 },
       });
@@ -94,14 +127,15 @@ export default function CreateProjectPage() {
         ? new Date(deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
         : 'No deadline';
       addProject({
+        id:           createdProject.id,
         projectID:    createdProject.projectID,
         projectName:  createdProject.projectName,
         projectDescription: createdProject.projectDescription,
         status:       'todo',
         statusLabel:  'Pending',
         teamName:     'Unassigned',
-        assigneeName: 'Shreyas Wakhare',
-        assigneeAvatar: 'SW',
+        assigneeName: currentUser.name,
+        assigneeAvatar: currentUser.initials,
         assigneeColor: '#4361ee',
         assignedDate: today,
         dueDate:      dueDateFormatted,
@@ -111,6 +145,15 @@ export default function CreateProjectPage() {
         tasksCompleted: 0,
         tags:         priority ? [priority.charAt(0).toUpperCase() + priority.slice(1)] : [],
       });
+
+      // Assign selected members with their chosen roles
+      if (membersWithRoles.length > 0) {
+        await Promise.allSettled(
+          membersWithRoles.map((m) =>
+            projectsService.addMember(createdProject.id, m.userId, m.roleId),
+          ),
+        );
+      }
 
       // Show success modal
       setNewProjectId(createdProject.projectID);
@@ -143,26 +186,41 @@ export default function CreateProjectPage() {
     setClientContact('');
     setClientTimezone('');
     setIsInternalProject(false);
+    setMembersWithRoles([]);
   };
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
-      <Sidebar />
+    <div className="flex flex-col h-screen bg-slate-50">
+      <Topbar 
+        title="" 
+        subtitle="" 
+        breadcrumb={
+          <div className="text-sm text-slate-500">
+            <button onClick={() => router.push('/dashboard')} className="hover:text-blue-600 transition-colors bg-transparent border-0 p-0 cursor-pointer text-sm text-slate-500">
+              Dashboard
+            </button>
+            <span className="mx-2">/</span>
+            <span>Create Project</span>
+          </div>
+        }
+      />
 
-      <div className="flex-1 ml-[220px]">
-        <Topbar 
-          title="" 
-          subtitle="" 
-          breadcrumb={
-            <div className="text-sm text-slate-500">
-              <button onClick={() => router.push('/dashboard')} className="hover:text-blue-600 transition-colors bg-transparent border-0 p-0 cursor-pointer text-sm text-slate-500">
-                Dashboard
-              </button>
-              <span className="mx-2">/</span>
-              <span>Create Project</span>
-            </div>
-          }
-        />
+      <div className="flex flex-1 overflow-hidden">
+        <Sidebar />
+
+        <div className="flex-1 overflow-auto">
+
+        {/* ── RBAC gate: only Manager / SuperAdmin reach here ───────────────── */}
+        {rbacLoading ? (
+          <div className="flex h-[60vh] items-center justify-center text-slate-500 text-sm">
+            Checking permissions…
+          </div>
+        ) : !canManage && !noProjects ? (
+          <AccessDenied
+            requiredPermission="Create Project (Manager / SuperAdmin only)"
+            role={undefined}
+          />
+        ) : (
 
         <main className="p-8">
           {/* Page Header */}
@@ -211,6 +269,21 @@ export default function CreateProjectPage() {
               />
 
               <FileUpload files={files} onFilesChange={setFiles} />
+
+              <TeamAssignment
+                selectedMembers={membersWithRoles.map((m) => m.name)}
+                teamName={projectName || 'New Project'}
+                teamID=''
+                onMembersChange={() => {}}
+                onTeamNameChange={() => {}}
+                teamTemplates={[]}
+                selectedTemplate=''
+                onTemplateSelect={() => {}}
+                systemUsers={systemUsers}
+                assignableRoles={assignableRoles}
+                membersWithRoles={membersWithRoles}
+                onMembersWithRolesChange={setMembersWithRoles}
+              />
             </div>
 
             {/* Right Column - Sticky Sidebar */}
@@ -237,6 +310,8 @@ export default function CreateProjectPage() {
             </div>
           </div>
         </main>
+        )}
+        </div>
       </div>
 
       {/* Success Modal */}
@@ -247,7 +322,7 @@ export default function CreateProjectPage() {
               <div className="text-7xl mb-4 animate-bounce">🎉</div>
               <h3 className="text-3xl font-bold text-slate-900 mb-3">Project Launched!</h3>
               <p className="text-slate-600 mb-6">
-                Your project has been created and the team has been notified. It's now live on
+                Your project has been created and the team has been notified. It&apos;s now live on
                 the board.
               </p>
               <div className="inline-flex items-center justify-center px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold rounded-xl mb-6 text-xl">

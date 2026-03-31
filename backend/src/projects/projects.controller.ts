@@ -107,14 +107,15 @@ export class ProjectsController {
 
   /**
    * DELETE /projects/:id
-   * Requires MANAGE_PROJECTS permission (SuperAdmin only — DELETE_PROJECT was removed as an orphan permission).
+   * Requires MANAGE_PROJECTS permission (SuperAdmin + Manager).
+   * SuperAdmin can delete any project; Manager can only delete projects they created.
    */
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @UseGuards(PermissionGuard)
   @RequirePermission('MANAGE_PROJECTS')
-  async remove(@Param('id') id: string) {
-    await this.projectsService.remove(id);
+  async remove(@Param('id') id: string, @Request() req: any) {
+    await this.projectsService.remove(id, req.user.userId);
   }
 
   // ── RBAC: Project permission & member management ───────────────────────────
@@ -163,5 +164,41 @@ export class ProjectsController {
   @RequirePermission('MANAGE_TEAM')
   removeMember(@Param('id') id: string, @Param('userId') userId: string) {
     return this.projectsService.removeMember(id, userId);
+  }
+
+  /**
+   * PUT /projects/:id/members/:userId
+   * Changes an existing member's role in the project. Requires MANAGE_TEAM.
+   */
+  @Put(':id/members/:userId')
+  @UseGuards(PermissionGuard)
+  @RequirePermission('MANAGE_TEAM')
+  updateMember(
+    @Param('id') id: string,
+    @Param('userId') userId: string,
+    @Body() body: { roleId: string },
+    @Request() req: any,
+  ) {
+    return this.projectsService.updateMemberRole(id, userId, body.roleId, req.user.userId);
+  }
+
+  /**
+   * POST /projects/:id/assign-manager
+   * SuperAdmin assigns a registered user as Manager in a project.
+   * Only SuperAdmin can call this (MANAGE_USERS is SuperAdmin-only permission).
+   * Body: { userId: string }
+   *
+   * This is the primary flow for:
+   *   SuperAdmin → Create Project → Assign Manager → Manager logs in & sees project
+   */
+  @Post(':id/assign-manager')
+  @UseGuards(PermissionGuard)
+  @RequirePermission('MANAGE_USERS')
+  assignManager(
+    @Param('id') id: string,
+    @Body() body: { userId: string },
+    @Request() req: any,
+  ) {
+    return this.projectsService.assignManager(id, body.userId, req.user.userId);
   }
 }

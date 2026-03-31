@@ -91,4 +91,67 @@ export const projectsService = {
   getPermissions: async (projectId: string): Promise<ProjectPermissions> => {
     return api.get<ProjectPermissions>(`/projects/${projectId}/permissions`);
   },
+
+  /**
+   * Get assignable roles (Manager, Developer, Client — NOT SuperAdmin).
+   * Used to populate the role dropdown when assigning members.
+   * Calls: GET /projects/roles
+   */
+  getRoles: async (): Promise<{ id: string; name: string; description: string }[]> => {
+    return api.get<{ id: string; name: string; description: string }[]>('/projects/roles');
+  },
+
+  /**
+   * Get existing members of a project (to show disabled state in assign UI).
+   * Calls: GET /projects/:projectId/members
+   */
+  getMembers: async (
+    projectId: string,
+  ): Promise<{ userId: string; name: string; email: string; roleId: string; roleName: string }[]> => {
+    return api.get(`/projects/${projectId}/members`);
+  },
+
+  /**
+   * Assign a user to a project with a specific role (generic).
+   * Requires MANAGE_TEAM permission (Manager or SuperAdmin).
+   * Calls: POST /projects/:projectId/members
+   */
+  addMember: async (
+    projectId: string,
+    userId: string,
+    roleId: string,
+  ): Promise<{ userId: string; name: string; email: string; roleId: string; roleName: string }> => {
+    return api.post(`/projects/${projectId}/members`, { userId, roleId });
+  },
+
+  /**
+   * SuperAdmin assigns a user specifically as Manager in a project.
+   * Calls: POST /projects/:projectId/assign-manager
+   */
+  assignManager: async (
+    projectId: string,
+    userId: string,
+  ): Promise<{ userId: string; name: string; email: string; roleId: string; roleName: string }> => {
+    return api.post(`/projects/${projectId}/assign-manager`, { userId });
+  },
+
+  /**
+   * Remove a user from a project.
+   * Calls: DELETE /projects/:projectId/members/:userId
+   */
+  removeMember: async (projectId: string, userId: string): Promise<void> => {
+    return api.delete(`/projects/${projectId}/members/${userId}`);
+  },
+
+  /**
+   * Update an existing member's role in a project.
+   * Calls: PUT /projects/:projectId/members/:userId
+   */
+  updateMemberRole: async (
+    projectId: string,
+    userId: string,
+    roleId: string,
+  ): Promise<{ userId: string; name: string; email: string; roleId: string; roleName: string }> => {
+    return api.put(`/projects/${projectId}/members/${userId}`, { roleId });
+  },
 };

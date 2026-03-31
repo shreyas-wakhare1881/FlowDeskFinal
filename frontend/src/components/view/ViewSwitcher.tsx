@@ -6,7 +6,6 @@ interface ViewSwitcherProps {
 }
 
 const views = [
-  { id: 'kanban', label: '📌 Kanban', icon: '📌' },
   { id: 'table', label: '📋 Table', icon: '📋' },
   { id: 'progress', label: '⭕ Progress', icon: '⭕' },
 ];

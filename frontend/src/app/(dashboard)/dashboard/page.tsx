@@ -11,6 +11,9 @@ import TeamPulse from '@/features/team-pulse/TeamPulse';
 import ProjectDetailModal from '@/components/dashboard/ProjectDetailModal';
 import { useProjects } from '@/lib/ProjectsContext';
 import { FEATURES } from '@/config/features';
+import { useCurrentUser } from '@/lib/hooks/useCurrentUser';
+import { useRbac } from '@/lib/RbacContext';
+
 
 // ── Dynamic greeting helpers ─────────────────────────────────────
 function getGreeting(): string {
@@ -53,8 +56,9 @@ interface ProjectCardData {
 export default function DashboardPage() {
   const router = useRouter();
   // ── All project data lives in the shared context ──────────────────────────
-  const { projects } = useProjects();
-
+  const { projects, loading } = useProjects();
+  const currentUser = useCurrentUser();
+  const { canManage, loading: rbacLoading } = useRbac();
   // PLACEHOLDER — remove the line below (needed for TS until mockProjects ref is gone)
   const _PLACEHOLDER = 'PRJ-001';
   void _PLACEHOLDER;
@@ -340,35 +344,89 @@ function _REMOVE_ME() { return [
   };
 
   // ── Card grid renderer (reads live from ProjectsContext) ──────
-  const renderPremiumProjectCard = () => (
-    <div
-      className="grid gap-5 mb-5"
-      style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))' }}
-    >
-      {visibleProjects.map((project) => (
-        <ProjectCard
-          key={project.projectID}
-          project={project}
-          onClick={() => handleProjectClick(project as ProjectCardData)}
-          onInfoAction={() => handleInfoAction(project as ProjectCardData)}
-        />
-      ))}
-    </div>
-  );
+  const renderPremiumProjectCard = () => {
+    // Loading skeleton
+    if (loading) {
+      return (
+        <div
+          className="grid gap-5 mb-5"
+          style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))' }}
+        >
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="bg-white rounded-2xl border border-slate-200 p-5 animate-pulse">
+              <div className="h-5 bg-slate-100 rounded-lg w-2/3 mb-3" />
+              <div className="h-3 bg-slate-100 rounded w-full mb-2" />
+              <div className="h-3 bg-slate-100 rounded w-4/5 mb-5" />
+              <div className="h-2 bg-slate-100 rounded-full w-full mb-2" />
+              <div className="flex justify-between items-center mt-4">
+                <div className="h-5 bg-slate-100 rounded-lg w-16" />
+                <div className="flex gap-1">
+                  {[1, 2, 3].map((j) => (
+                    <div key={j} className="w-7 h-7 bg-slate-100 rounded-full" />
+                  ))}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    // Empty state — no projects assigned
+    if (visibleProjects.length === 0) {
+      return (
+        <div className="flex flex-col items-center justify-center py-20 mb-5">
+          <div className="w-20 h-20 bg-slate-100 rounded-2xl flex items-center justify-center text-4xl mb-5">
+            📋
+          </div>
+          <h3 className="text-lg font-bold text-slate-800 mb-2">
+            {searchQuery || filter !== 'all' ? 'No projects match your filter' : 'No projects assigned yet'}
+          </h3>
+          <p className="text-slate-500 text-sm text-center max-w-sm">
+            {searchQuery || filter !== 'all'
+              ? 'Try changing your search or filter.'
+              : 'You are not assigned to any project. Contact your SuperAdmin to be assigned to a project.'}
+          </p>
+          {!searchQuery && filter === 'all' && canManage && (
+            <button
+              onClick={() => router.push('/create')}
+              className="mt-5 px-5 py-2.5 bg-[#4361ee] text-white rounded-xl font-semibold text-sm hover:bg-[#3651ce] transition-all"
+            >
+              + Create a New Project
+            </button>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div
+        className="grid gap-5 mb-5"
+        style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))' }}
+      >
+        {visibleProjects.map((project) => (
+          <ProjectCard
+            key={project.projectID}
+            project={project}
+            onClick={() => handleProjectClick(project as ProjectCardData)}
+            onInfoAction={() => handleInfoAction(project as ProjectCardData)}
+          />
+        ))}
+      </div>
+    );
+  };
 
   return (
-    <div className="flex min-h-screen" style={{ background: '#f4f6fb' }}>
-      <Sidebar isOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
-      
-      <div className="flex-1 md:ml-[200px]">
-        <Topbar title="" subtitle="" onMenuToggle={() => setMobileNavOpen(o => !o)} />
-        
-        <main className="p-4 md:p-5">
+    <div className="flex flex-col h-screen" style={{ background: '#f4f6fb' }}>
+      <Topbar title="" subtitle="" onMenuToggle={() => setMobileNavOpen(o => !o)} />
+      <div className="flex flex-1 overflow-hidden">
+        <Sidebar isOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
+        <main className="flex-1 overflow-auto p-4 md:p-5">
           <div className="max-w-7xl mx-auto">
           {/* Greeting */}
           <div className="mb-5">
             <h2 className="text-xl font-bold text-slate-900 mb-1">
-              {getGreeting()}, Shreyas 👋
+              {getGreeting()}, {currentUser.name.split(' ')[0]} 👋
             </h2>
             <p className="text-slate-500 text-sm">
               Here&#39;s what&#39;s happening with your projects today — {getTodayLabel()}

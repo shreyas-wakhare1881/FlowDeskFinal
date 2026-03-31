@@ -198,8 +198,18 @@ export class ProjectsService {
     return project;
   }
 
-  async remove(id: string) {
-    await this.findOne(id);
+  async remove(id: string, requestingUserId: string) {
+    const project = await this.findOne(id);
+
+    // SuperAdmin can delete any project.
+    // Manager can only delete projects they created (project.createdById === them).
+    const isSuperAdmin = await this.prisma.userRole.findFirst({
+      where: { userId: requestingUserId, role: { name: 'SuperAdmin' } },
+    });
+
+    if (!isSuperAdmin && project.createdById !== requestingUserId) {
+      throw new ForbiddenException('Managers can only delete projects they created');
+    }
 
     return this.prisma.project.delete({
       where: { id },
@@ -243,19 +253,31 @@ export class ProjectsService {
 
   /**
    * GET /projects/my
-   * Returns only the projects where the requesting user has a row in user_roles.
+   * Returns projects where the user has an RBAC role assignment OR created the project.
+   * Rule: Manager sees assigned projects + projects created by themselves.
    */
   async findMyProjects(userId: string) {
+    // 1. Projects via RBAC assignment (user_roles table)
     const userRoles = await this.prisma.userRole.findMany({
       where: { userId },
       select: { projectId: true },
     });
+    const roleProjectIds = userRoles.map((ur) => ur.projectId);
 
-    const projectIds = userRoles.map((ur) => ur.projectId);
-    if (projectIds.length === 0) return { data: [], meta: { total: 0 } };
+    // 2. Projects created by this user (fallback: auto-assign inserts into user_roles on
+    //    create, but this covers edge cases where that row may not exist yet)
+    const createdProjects = await this.prisma.project.findMany({
+      where: { createdById: userId },
+      select: { id: true },
+    });
+    const createdProjectIds = createdProjects.map((p) => p.id);
+
+    // Union — deduplicated
+    const allIds = [...new Set([...roleProjectIds, ...createdProjectIds])];
+    if (allIds.length === 0) return { data: [], meta: { total: 0 } };
 
     const data = await this.prisma.project.findMany({
-      where: { id: { in: projectIds } },
+      where: { id: { in: allIds } },
       include: FULL_INCLUDE,
       orderBy: { createdAt: 'desc' },
     });
@@ -409,5 +431,71 @@ export class ProjectsService {
     });
 
     return { message: 'Member removed successfully' };
+  }
+
+  /**
+   * POST /projects/:id/assign-manager
+   * SuperAdmin assigns an existing user as Manager in a project.
+   * Internally calls addMember with the Manager role — no need to look up roleId on frontend.
+   */
+  async assignManager(projectId: string, targetUserId: string, assignedById: string) {
+    const managerRole = await this.prisma.role.findUnique({ where: { name: 'Manager' } });
+    if (!managerRole) {
+      throw new NotFoundException('Manager role not found in database');
+    }
+    return this.addMember(projectId, targetUserId, managerRole.id, assignedById);
+  }
+
+  /**
+   * PUT /projects/:id/members/:userId
+   * Changes an existing member's role in a project.
+   * roleId is part of the composite PK (userId, roleId, projectId), so we
+   * cannot UPDATE it in place — must delete + recreate atomically.
+   */
+  async updateMemberRole(
+    projectId: string,
+    targetUserId: string,
+    newRoleId: string,
+    assignedById: string,
+  ) {
+    await this.findOne(projectId);
+
+    const existing = await this.prisma.userRole.findFirst({
+      where: { userId: targetUserId, projectId },
+    });
+    if (!existing) throw new NotFoundException('User is not a member of this project');
+
+    const roleExists = await this.prisma.role.findUnique({ where: { id: newRoleId } });
+    if (!roleExists) throw new NotFoundException(`Role ${newRoleId} not found`);
+
+    // Security: only SuperAdmin can assign the SuperAdmin role
+    if (roleExists.name === 'SuperAdmin') {
+      const callerIsSuperAdmin = await this.prisma.userRole.findFirst({
+        where: { userId: assignedById, role: { name: 'SuperAdmin' } },
+      });
+      if (!callerIsSuperAdmin) {
+        throw new ForbiddenException('Only SuperAdmin can assign the SuperAdmin role');
+      }
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.userRole.deleteMany({ where: { userId: targetUserId, projectId } });
+      return tx.userRole.create({
+        data: { userId: targetUserId, roleId: newRoleId, projectId, assignedById },
+        include: {
+          user: { select: { id: true, name: true, email: true } },
+          role: { select: { id: true, name: true } },
+        },
+      });
+    });
+
+    return {
+      userId: updated.userId,
+      name: updated.user.name,
+      email: updated.user.email,
+      roleId: updated.role.id,
+      roleName: updated.role.name,
+      assignedAt: updated.assignedAt,
+    };
   }
 }

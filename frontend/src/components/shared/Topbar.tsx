@@ -1,7 +1,10 @@
 'use client';
 
 import { ReactNode, useState, useEffect } from 'react';
+import Image from 'next/image';
 import { useSearch } from '@/lib/search/SearchContext';
+import NavActions from '@/components/shared/NavActions';
+import { useSidebar } from '@/lib/SidebarContext';
 
 interface TopbarProps {
   title: string;
@@ -12,6 +15,9 @@ interface TopbarProps {
 
 export default function Topbar({ title, subtitle, onMenuToggle, breadcrumb }: TopbarProps) {
   const { openSearch } = useSearch();
+  const { isCollapsed, toggle, immediateToggle, isHoverOpen, handleMouseEnter, handleMouseLeave } = useSidebar();
+  // Sidebar visible = explicitly open (click) OR hover-opened
+  const isSidebarVisible = !isCollapsed || isHoverOpen;
   const [mounted, setMounted] = useState(false);
 
   // Prevent hydration mismatch by only rendering search after mount
@@ -19,39 +25,65 @@ export default function Topbar({ title, subtitle, onMenuToggle, breadcrumb }: To
     setMounted(true);
   }, []);
 
-  const handleNotification = () => {
-    alert('🔔 You have 5 new notifications!');
-  };
-
-  const handleUndo = () => {
-    alert('↩️ Last action undone!');
-  };
 
   return (
-    <header className="sticky top-0 z-40 bg-white border-b border-slate-200 px-5 py-2.5">
-      <div className="flex items-center justify-between gap-4">
+    <header className="sticky top-0 z-50 bg-white border-b border-slate-200 px-4 h-14 flex items-center">
+      <div className="flex items-center justify-between gap-4 w-full">
 
-        {/* Hamburger — mobile only */}
-        <button
-          onClick={onMenuToggle}
-          className="md:hidden w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 transition-colors flex-shrink-0"
-          aria-label="Open navigation"
-        >
-          <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-        </button>
+        {/* ── LEFT: Logo + Hamburger — always in navbar, swap-effect when sidebar open ── */}
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {/* Desktop: logo left, hamburger right — container widens to w-64 when sidebar open */}
+          <div
+            className={[
+              'hidden md:flex items-center transition-all duration-300 ease-in-out overflow-hidden',
+              isSidebarVisible ? 'w-64 justify-between pr-1' : 'flex-row-reverse gap-2',
+            ].join(' ')}
+          >
+            {/* Logo — always extreme left */}
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <div className="w-7 h-7 rounded-md overflow-hidden ring-1 ring-slate-200 flex-shrink-0">
+                <Image src="/logo.png" alt="FlowDesk" width={28} height={28} className="w-full h-full object-cover" />
+              </div>
+              <span className="text-slate-800 text-sm font-bold tracking-tight whitespace-nowrap">FlowDesk</span>
+            </div>
+            {/* Hamburger — right of logo (shifts to sidebar-right-edge when open) */}
+            <button
+              onClick={immediateToggle}
+              onMouseEnter={handleMouseEnter}
+              onMouseLeave={handleMouseLeave}
+              title={isSidebarVisible ? 'Collapse sidebar' : 'Expand sidebar'}
+              className="w-8 h-8 flex-shrink-0 rounded-md flex items-center justify-center text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-all duration-150"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="3" y1="6" x2="21" y2="6"/>
+                <line x1="3" y1="12" x2="21" y2="12"/>
+                <line x1="3" y1="18" x2="21" y2="18"/>
+              </svg>
+            </button>
+          </div>
 
-        {/* Title or Breadcrumb */}
+          {/* Mobile: hamburger always visible */}
+          <button
+            onClick={onMenuToggle}
+            className="md:hidden w-8 h-8 flex items-center justify-center rounded-md hover:bg-slate-100 transition-colors flex-shrink-0"
+            aria-label="Open navigation"
+          >
+            <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+        </div>
+
+        {/* ── CENTRE-LEFT: Title or Breadcrumb ── */}
         <div className="flex-shrink-0">
           {breadcrumb ? (
             breadcrumb
-          ) : (
-            <h1 className="text-lg font-bold text-slate-900 leading-tight">
+          ) : title ? (
+            <h1 className="text-base font-bold text-slate-900 leading-tight">
               {title}
               {subtitle && <span className="text-slate-400 font-normal text-sm"> / {subtitle}</span>}
             </h1>
-          )}
+          ) : null}
         </div>
 
         {/* Search Bar — centered and wider */}
@@ -87,8 +119,8 @@ export default function Topbar({ title, subtitle, onMenuToggle, breadcrumb }: To
           </div>
         </div>
 
-        {/* Actions */}
-        <div className="flex items-center gap-1.5 flex-shrink-0">
+        {/* Right-side actions: mobile search + NavActions */}
+        <div className="flex items-center gap-1 flex-shrink-0">
           {/* Mobile Search Button */}
           {mounted && (
             <button
@@ -101,29 +133,7 @@ export default function Topbar({ title, subtitle, onMenuToggle, breadcrumb }: To
               </svg>
             </button>
           )}
-
-          {/* Notifications */}
-          <button
-            onClick={handleNotification}
-            className="relative w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 transition-colors group"
-            title="Notifications"
-          >
-            <svg className="w-4 h-4 text-slate-600 group-hover:text-slate-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-            </svg>
-            <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-red-500 rounded-full"></span>
-          </button>
-
-          {/* Undo */}
-          <button
-            onClick={handleUndo}
-            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 transition-colors group"
-            title="Undo last action"
-          >
-            <svg className="w-4 h-4 text-slate-600 group-hover:text-slate-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-            </svg>
-          </button>
+          <NavActions />
         </div>
       </div>
     </header>

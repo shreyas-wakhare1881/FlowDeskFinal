@@ -67,7 +67,7 @@ export interface CreateProjectDto {
   priority: string;
   category: string;
   assignedDate: Date | string;
-  dueDate: Date | string;
+  dueDate?: Date | string;
   teamID: string;
   teamName: string;
   assigneeID: string;

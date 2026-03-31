@@ -240,31 +240,34 @@ async function main() {
   // These are the only accounts with global SuperAdmin privileges.
   // All other users are created via /auth/register and start with zero roles.
   const SUPERADMIN_ACCOUNTS = [
-    { email: 'admin@flowdesk.com',           name: 'Shreyas Wakhare',  password: 'admin123'      },
-    { email: 'superadmin@datafortune.com',   name: 'Rakteem Barooah',  password: 'superadim123'  },
+    { email: 'admin@flowdesk.com',           name: 'Shreyas Wakhare',  password: 'admin123'       },
+    { email: 'superadmin@datafortune.com',   name: 'Rakteem Barooah',  password: 'superadmin123'  },
   ];
 
   for (const account of SUPERADMIN_ACCOUNTS) {
     const hash = await bcrypt.hash(account.password, 10);
     await prisma.user.upsert({
       where:  { email: account.email },
-      update: { name: account.name },
+      update: { name: account.name, passwordHash: hash },   // also reset password on re-seed
       create: { email: account.email, name: account.name, passwordHash: hash },
     });
     console.log(`✅ SuperAdmin seeded: ${account.email}`);
   }
 
-  // Clear existing data (in correct order to respect FK constraints)
-  await prisma.teamParticipant.deleteMany();
-  await prisma.team.deleteMany();
-  await prisma.taskAssignee.deleteMany();
-  await prisma.task.deleteMany();
-  await prisma.projectTag.deleteMany();
-  await prisma.teamMember.deleteMany();
-  await prisma.teamLead.deleteMany();
-  await prisma.metrics.deleteMany();
-  await prisma.project.deleteMany();
+  // ── Seed demo projects ONLY on first run ──────────────────────────────────
+  // NEVER delete projects here again. Deleting projects cascades to user_roles
+  // via ON DELETE CASCADE, wiping every registered user's role assignment.
+  // Guard: if projects already exist, skip this entire block so registered
+  // users and their role assignments are always preserved.
+  const existingProjectCount = await prisma.project.count();
 
+  if (existingProjectCount > 0) {
+    console.log(`  ⏭️  Projects already exist (${existingProjectCount} found) — skipping project seed. Registered user data is preserved.`);
+  } else {
+    console.log('  📦 No projects found — running first-time project seed...');
+  }
+
+  if (existingProjectCount === 0) {
   for (const p of SEED_PROJECTS) {
     await prisma.project.create({
       data: {
@@ -310,8 +313,8 @@ async function main() {
     });
     console.log(`  ✅ Created ${p.projectID} — ${p.projectName}`);
   }
-
   console.log(`\n🎉 Seed complete! ${SEED_PROJECTS.length} projects inserted.`);
+  } // ── end first-run guard ─────────────────────────────────────────────────
 
   // ============================================================
   // RBAC SEED — Phase 1 (March 30, 2026)
@@ -407,12 +410,11 @@ async function main() {
       'MANAGE_TASKS', 'MANAGE_PROJECTS', 'MANAGE_TEAM', 'MANAGE_USERS',
       'VIEW_REPORTS', 'ADD_COMMENT', 'VIEW_COMMENT', 'DELETE_COMMENT',
     ],
+    // Manager now mirrors SuperAdmin permissions but remains project-scoped.
+    // SuperAdmin = global scope; Manager = full control within their project.
     Manager: [
-      'CREATE_TASK', 'READ_TASK', 'UPDATE_TASK', 'DELETE_TASK',
-      'VIEW_PROJECT', 'UPDATE_PROJECT',
-      'VIEW_TEAM', 'MANAGE_TEAM',
-      'VIEW_REPORTS',
-      'ADD_COMMENT', 'VIEW_COMMENT', 'DELETE_COMMENT',
+      'MANAGE_TASKS', 'MANAGE_PROJECTS', 'MANAGE_TEAM', 'MANAGE_USERS',
+      'VIEW_REPORTS', 'ADD_COMMENT', 'VIEW_COMMENT', 'DELETE_COMMENT',
     ],
     Developer: [
       'READ_TASK', 'UPDATE_TASK',
