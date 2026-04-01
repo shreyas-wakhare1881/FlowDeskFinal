@@ -1,9 +1,10 @@
 'use client';
 
 import Image from 'next/image';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCurrentUser } from '@/lib/hooks/useCurrentUser';
 import { usePermissions } from '@/lib/hooks/usePermissions';
+import { useIssueModal } from '@/lib/IssueModalContext';
 
 interface WsSidebarProps {
   projectId: string;
@@ -21,14 +22,6 @@ const wsNavItems = [
     ),
   },
   {
-    label: 'Create Task', slug: 'ws-create-task',
-    icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
-      </svg>
-    ),
-  },
-  {
     label: 'View', slug: 'ws-view',
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -41,11 +34,15 @@ const wsNavItems = [
 export default function WsSidebar({ projectId, projectName }: WsSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const currentUser = useCurrentUser();
+  const { openCreateIssue } = useIssueModal();
   // Fetch project-scoped permissions to gate workspace nav items
   const { permissions, loading: permLoading } = usePermissions(projectId);
 
   const basePath = `/workspace/${projectId}`;
+
+  const canCreateIssue = permLoading || permissions.includes('CREATE_ISSUE') || permissions.includes('MANAGE_ISSUES');
 
   return (
     <nav className="w-[220px] min-h-screen bg-[#0d1117] flex flex-col fixed left-0 top-0 z-50">
@@ -68,20 +65,10 @@ export default function WsSidebar({ projectId, projectName }: WsSidebarProps) {
 
       {/* Navigation */}
       <div className="flex-1 py-3 px-3 flex flex-col gap-0.5">
-        {wsNavItems
-          .filter((item) => {
-            // Hide 'Create Task' nav entry for roles that lack CREATE_TASK permission.
-            // While loading we keep it visible to avoid layout flicker.
-            if (
-              item.slug === 'ws-create-task' &&
-              !permLoading &&
-              !permissions.includes('CREATE_TASK')
-            ) return false;
-            return true;
-          })
-          .map((item) => {
+        {/* Regular nav links */}
+        {wsNavItems.map((item) => {
           const path = `${basePath}/${item.slug}`;
-          const isActive = pathname === path;
+          const isActive = pathname === path || pathname.startsWith(path + '?');
           return (
             <button
               key={item.slug}
@@ -104,7 +91,78 @@ export default function WsSidebar({ projectId, projectName }: WsSidebarProps) {
           );
         })}
 
+        {/* Backlog link — always visible */}
+        {(() => {
+          const path = `${basePath}/ws-view?tab=backlog`;
+          const isActive = pathname === `${basePath}/ws-view` && searchParams.get('tab') === 'backlog';
+          return (
+            <button
+              onClick={() => router.push(path)}
+              className={`group relative w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 overflow-hidden
+                ${isActive
+                  ? 'bg-white/10 text-white'
+                  : 'text-white/60 hover:bg-white/5 hover:text-white'
+                }`}
+            >
+              {!isActive && (
+                <span className="absolute bottom-0 left-0 h-[2px] w-full bg-blue-400 origin-left scale-x-0 group-hover:scale-x-100 transition-transform duration-250" />
+              )}
+              <span className={isActive ? 'text-blue-400' : ''}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/>
+                  <line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/>
+                  <line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+                </svg>
+              </span>
+              <span>Backlog</span>
+            </button>
+          );
+        })()}
 
+        {/* Create Issue button — triggers modal, gated by CREATE_ISSUE */}
+        {canCreateIssue && (
+          <button
+            onClick={() => openCreateIssue('TASK')}
+            className="group relative w-full flex items-center gap-3 px-3 py-2 mt-1 rounded-lg text-sm font-semibold transition-all duration-150 bg-blue-500/15 text-blue-400 hover:bg-blue-500/25 hover:text-blue-300 border border-blue-500/20"
+          >
+            <span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
+              </svg>
+            </span>
+            <span>Create Issue</span>
+          </button>
+        )}
+
+        {/* Settings — gated by UPDATE_PROJECT (Managers + SuperAdmins) */}
+        {(permLoading || permissions.includes('UPDATE_PROJECT') || permissions.includes('MANAGE_PROJECTS')) && (() => {
+          const path = `${basePath}/settings`;
+          const isActive = pathname === path;
+          return (
+            <button
+              onClick={() => router.push(path)}
+              className={`group relative w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 overflow-hidden
+                ${isActive
+                  ? 'bg-white/10 text-white'
+                  : 'text-white/60 hover:bg-white/5 hover:text-white'
+                }`}
+            >
+              {isActive && (
+                <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-blue-400 rounded-full" />
+              )}
+              {!isActive && (
+                <span className="absolute bottom-0 left-0 h-[2px] w-full bg-blue-400 origin-left scale-x-0 group-hover:scale-x-100 transition-transform duration-250" />
+              )}
+              <span className={isActive ? 'text-blue-400' : ''}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="3"/>
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+              </span>
+              <span>Settings</span>
+            </button>
+          );
+        })()}
       </div>
 
       {/* Bottom */}

@@ -9,10 +9,12 @@ import ProjectCard from '@/components/dashboard/ProjectCard';
 import ActivityFeed from '@/features/catch-up-feed/ActivityFeed';
 import TeamPulse from '@/features/team-pulse/TeamPulse';
 import ProjectDetailModal from '@/components/dashboard/ProjectDetailModal';
+import AddPeopleModal from '@/components/dashboard/AddPeopleModal';
 import { useProjects } from '@/lib/ProjectsContext';
 import { FEATURES } from '@/config/features';
 import { useCurrentUser } from '@/lib/hooks/useCurrentUser';
 import { useRbac } from '@/lib/RbacContext';
+import { projectsService } from '@/lib/projects.service';
 
 
 // ── Dynamic greeting helpers ─────────────────────────────────────
@@ -56,9 +58,9 @@ interface ProjectCardData {
 export default function DashboardPage() {
   const router = useRouter();
   // ── All project data lives in the shared context ──────────────────────────
-  const { projects, loading } = useProjects();
+  const { projects, loading, refreshProjects } = useProjects();
   const currentUser = useCurrentUser();
-  const { canManage, loading: rbacLoading } = useRbac();
+  const { canManage, loading: rbacLoading, role: globalRole } = useRbac();
   // PLACEHOLDER — remove the line below (needed for TS until mockProjects ref is gone)
   const _PLACEHOLDER = 'PRJ-001';
   void _PLACEHOLDER;
@@ -281,6 +283,12 @@ function _REMOVE_ME() { return [
   const [enteringProject, setEnteringProject] = useState<{ name: string; id: string } | null>(null);
   const [overlayVisible, setOverlayVisible] = useState(false);
 
+  // ── Project Actions state ──────────────────────────────────────────────
+  const [actionsProject, setActionsProject] = useState<{ id: string; projectID: string; projectName: string } | null>(null);
+  const [showAddPeople, setShowAddPeople] = useState(false);
+  const [archiveToast, setArchiveToast] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
+
   // Stats computed live from shared context projects
   const stats = useMemo(() => ({
     total: projects.length,
@@ -341,6 +349,18 @@ function _REMOVE_ME() { return [
   const handleQuickFilter = (newFilter: typeof filter) => {
     setFilter(newFilter);
     setSearchQuery('');
+  };
+
+  // ── Project Actions handlers ────────────────────────────────
+  const handleDeleteProject = async () => {
+    if (!deleteConfirm) return;
+    try {
+      await projectsService.delete(deleteConfirm.id);
+      refreshProjects?.();
+      setDeleteConfirm(null);
+    } catch {
+      // silently — project might already be gone
+    }
   };
 
   // ── Card grid renderer (reads live from ProjectsContext) ──────
@@ -410,6 +430,15 @@ function _REMOVE_ME() { return [
             project={project}
             onClick={() => handleProjectClick(project as ProjectCardData)}
             onInfoAction={() => handleInfoAction(project as ProjectCardData)}
+            canManage={canManage}
+            isSuperAdmin={globalRole === 'SuperAdmin'}
+            onAddPeople={() => {
+              setActionsProject({ id: project.id ?? project.projectID, projectID: project.projectID, projectName: project.projectName });
+              setShowAddPeople(true);
+            }}
+            onSettings={() => router.push(`/workspace/${project.projectID}/settings`)}
+            onArchive={() => setArchiveToast(true)}
+            onDelete={() => setDeleteConfirm({ id: project.id ?? project.projectID, name: project.projectName })}
           />
         ))}
       </div>
@@ -655,6 +684,103 @@ function _REMOVE_ME() { return [
           project={selectedProject}
           onClose={() => setSelectedProject(null)}
         />
+      )}
+
+      {/* Add People Modal */}
+      {showAddPeople && actionsProject && (
+        <AddPeopleModal
+          projectId={actionsProject.id}
+          projectName={actionsProject.projectName}
+          onClose={() => { setShowAddPeople(false); setActionsProject(null); }}
+          onMembersChanged={() => refreshProjects?.()}
+        />
+      )}
+
+      {/* Archive Toast */}
+      {archiveToast && (
+        <div style={{
+          position: 'fixed', bottom: '28px', left: '50%', transform: 'translateX(-50%)',
+          zIndex: 9999, background: '#1e293b', color: '#fff',
+          padding: '12px 22px', borderRadius: '12px',
+          fontSize: '0.85rem', fontWeight: 500,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
+          animation: 'apm-fade-in 0.2s ease',
+          display: 'flex', alignItems: 'center', gap: '10px',
+        }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+            stroke="#facc15" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="21 8 21 21 3 21 3 8" />
+            <rect x="1" y="3" width="22" height="5" />
+            <line x1="10" y1="12" x2="14" y2="12" />
+          </svg>
+          Archiving coming soon
+          <button onClick={() => setArchiveToast(false)} style={{
+            background: 'none', border: 'none', color: '#94a3b8',
+            cursor: 'pointer', marginLeft: '4px', fontSize: '1rem', lineHeight: 1,
+          }}>×</button>
+        </div>
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      {deleteConfirm && (
+        <>
+          <div onClick={() => setDeleteConfirm(null)} style={{
+            position: 'fixed', inset: 0, zIndex: 9000,
+            background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(3px)',
+          }} />
+          <div style={{
+            position: 'fixed', inset: 0, zIndex: 9001,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px',
+          }}>
+            <div style={{
+              background: '#fff', borderRadius: '16px', maxWidth: '420px', width: '100%',
+              padding: '28px 28px 22px', boxShadow: '0 24px 64px rgba(0,0,0,0.18)',
+              animation: 'apm-scale-in 0.2s cubic-bezier(0.16,1,0.3,1) both',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+                <div style={{
+                  width: '40px', height: '40px', borderRadius: '10px',
+                  background: '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flexShrink: 0,
+                }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                    stroke="#dc2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                    <path d="M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#0f172a' }}>
+                    Delete Project
+                  </h3>
+                  <p style={{ margin: '2px 0 0', fontSize: '0.8rem', color: '#64748b' }}>
+                    This action cannot be undone
+                  </p>
+                </div>
+              </div>
+              <p style={{ fontSize: '0.85rem', color: '#374151', marginBottom: '20px', lineHeight: 1.6 }}>
+                Are you sure you want to delete <strong>{deleteConfirm.name}</strong>? All issues, members, and data will be permanently removed.
+              </p>
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                <button onClick={() => setDeleteConfirm(null)} style={{
+                  padding: '8px 18px', borderRadius: '8px', border: '1.5px solid #e2e8f0',
+                  background: '#fff', color: '#374151', fontSize: '0.84rem', fontWeight: 600,
+                  cursor: 'pointer', transition: 'background 0.15s',
+                }}>
+                  Cancel
+                </button>
+                <button onClick={handleDeleteProject} style={{
+                  padding: '8px 18px', borderRadius: '8px', border: 'none',
+                  background: '#dc2626', color: '#fff', fontSize: '0.84rem', fontWeight: 600,
+                  cursor: 'pointer', transition: 'background 0.15s',
+                }}>
+                  Delete Project
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
       )}
 
       {/* Workspace Entry Transition Overlay */}

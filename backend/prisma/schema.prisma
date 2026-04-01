@@ -29,6 +29,10 @@ model User {
   grantedPerms      RolePermission[]     // permission mappings this user approved
   createdProjects   Project[]   @relation("ProjectCreator")  // projects this user created
 
+  // ── Issues relations (Phase 2) ────────────────────────────────────
+  assignedIssues    Issue[]     @relation("IssueAssignee")
+  reportedIssues    Issue[]     @relation("IssueReporter")
+
   @@index([email])
   @@map("users")
 }
@@ -65,6 +69,10 @@ model Project {
   isRecurring         Boolean   @default(false)
   recurringFrequency  String?
 
+  // ── Project Settings (Phase 3) ────────────────────────────────────
+  projectKey          String?   @unique          // short key e.g. "SCRUM" — nullable, set via settings
+  visibility          Visibility @default(PRIVATE)
+
   // ── RBAC: project ownership (Phase 1) ────────────────────────────
   createdById         String?                           // nullable for backward compat with existing projects
   createdBy           User?     @relation("ProjectCreator", fields: [createdById], references: [id], onDelete: SetNull)
@@ -76,6 +84,7 @@ model Project {
   tags                ProjectTag[]
   teams               Team[]
   tasks               Task[]
+  issues              Issue[]
   userRoles           UserRole[]   // members + their roles in this project
   
   createdAt           DateTime  @default(now())
@@ -318,4 +327,101 @@ model UserRole {
   @@unique([userId, projectId])  // enforces one role per user per project at DB level
   @@index([userId, projectId])   // fast lookup: "what is this user's role in this project?"
   @@map("user_roles")
+}
+
+// ============================================
+// ISSUES — Jira-style hierarchical issue tracking
+// Phase 2 addition (April 2026)
+// Hierarchy: EPIC → STORY → TASK (via self-relation parentId)
+// ============================================
+
+enum IssueType {
+  EPIC
+  STORY
+  TASK
+  BUG
+}
+
+enum IssueLinkType {
+  BLOCKS
+  DEPENDS_ON
+  RELATES_TO
+  DUPLICATES
+}
+
+enum IssueStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+}
+
+enum IssuePriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum Visibility {
+  PRIVATE
+  PUBLIC
+}
+
+model Issue {
+  id          String        @id @default(uuid())
+  issueKey    String        @unique     // e.g. "PRJ-1", "PRJ-2" — scoped per project
+  type        IssueType
+  title       String
+  description String?
+  status      IssueStatus   @default(TODO)
+  priority    IssuePriority @default(MEDIUM)
+
+  // Self-relation for hierarchy (EPIC→STORY→TASK→BUG)
+  parentId    String?
+  parent      Issue?        @relation("IssueChildren", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Issue[]       @relation("IssueChildren")
+
+  // Issue links (BLOCKS, DEPENDS_ON, RELATES_TO, DUPLICATES)
+  sourceLinks IssueLink[]   @relation("SourceIssue")
+  targetLinks IssueLink[]   @relation("TargetIssue")
+
+  // Project ownership
+  projectId   String
+  project     Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  // User relations
+  assigneeId  String?
+  assignee    User?         @relation("IssueAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  reporterId  String?
+  reporter    User?         @relation("IssueReporter", fields: [reporterId], references: [id], onDelete: SetNull)
+
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([projectId])
+  @@index([parentId])
+  @@index([status])
+  @@index([type])
+  @@map("issues")
+}
+
+// ============================================
+// ISSUE LINKS — Jira-style relationships between issues
+// e.g. BLOCKS, DEPENDS_ON, RELATES_TO, DUPLICATES
+// ============================================
+
+model IssueLink {
+  id            String        @id @default(cuid())
+  linkType      IssueLinkType
+  sourceIssueId String
+  targetIssueId String
+
+  source        Issue         @relation("SourceIssue", fields: [sourceIssueId], references: [id], onDelete: Cascade)
+  target        Issue         @relation("TargetIssue", fields: [targetIssueId], references: [id], onDelete: Cascade)
+
+  createdAt     DateTime      @default(now())
+
+  @@unique([sourceIssueId, targetIssueId, linkType])
+  @@index([sourceIssueId])
+  @@index([targetIssueId])
+  @@map("issue_links")
 }

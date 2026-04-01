@@ -80,6 +80,18 @@ export const api = {
     return handleResponse<T>(response);
   },
 
+  patch: async <T>(endpoint: string, data: unknown): Promise<T> => {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<T>(response);
+  },
+
   /**
    * DELETE request.
    * @param endpoint  API path, e.g. '/tasks/uuid'

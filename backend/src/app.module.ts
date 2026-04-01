@@ -5,8 +5,10 @@ import { TasksModule } from './tasks/tasks.module';
 import { TeamsModule } from './teams/teams.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
+import { IssuesModule } from './issues/issues.module';
+import { IssueLinksModule } from './issue-links/issue-links.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, ProjectsModule, TasksModule, TeamsModule, UsersModule],
+  imports: [PrismaModule, AuthModule, ProjectsModule, TasksModule, TeamsModule, UsersModule, IssuesModule, IssueLinksModule],
 })
 export class AppModule {}

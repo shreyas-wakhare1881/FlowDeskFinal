@@ -144,6 +144,14 @@ export const projectsService = {
   },
 
   /**
+   * Search registered FlowDesk users by name or email (for Add People autocomplete).
+   * Calls: GET /users?q=keyword
+   */
+  searchUsers: async (q: string): Promise<{ id: string; name: string; email: string }[]> => {
+    return api.get<{ id: string; name: string; email: string }[]>(`/users?q=${encodeURIComponent(q)}`);
+  },
+
+  /**
    * Update an existing member's role in a project.
    * Calls: PUT /projects/:projectId/members/:userId
    */

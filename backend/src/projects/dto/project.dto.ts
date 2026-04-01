@@ -1,6 +1,7 @@
 import {
   IsString, IsOptional, IsBoolean, IsDateString,
   IsArray, IsNotEmpty, IsIn, ValidateNested, IsNumber, Min, Max,
+  IsEnum,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -129,4 +130,11 @@ export class UpdateProjectDto {
 
   @IsOptional() @ValidateNested() @Type(() => MetricsDto)
   metrics?: MetricsDto;
+
+  // ── Project Settings (Phase 3) ─────────────────────────────────────
+  @IsOptional() @IsString()
+  projectKey?: string;
+
+  @IsOptional() @IsEnum(['PRIVATE', 'PUBLIC'])
+  visibility?: 'PRIVATE' | 'PUBLIC';
 }

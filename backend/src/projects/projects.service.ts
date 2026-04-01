@@ -9,6 +9,16 @@ const FULL_INCLUDE = {
   metrics: true,
   tags: true,
   teams: { include: { members: true } },
+  // Real RBAC members with user info (for live avatars on project cards)
+  userRoles: {
+    include: {
+      user: { select: { id: true, name: true, email: true } },
+      role: { select: { id: true, name: true } },
+    },
+    orderBy: { assignedAt: 'asc' as const },
+  },
+  // Real issue count
+  _count: { select: { issues: true } },
 } as const;
 
 @Injectable()
@@ -342,12 +352,28 @@ export class ProjectsService {
     };
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // Private helper: accepts UUID **or** short code (e.g. PRJ-001).
+  // Returns the real UUID — throws NotFoundException if not found.
+  // ─────────────────────────────────────────────────────────────────────────
+  private async resolveProjectId(projectIdOrCode: string): Promise<string> {
+    const project = await this.prisma.project.findFirst({
+      where: { OR: [{ id: projectIdOrCode }, { projectID: projectIdOrCode }] },
+      select: { id: true },
+    });
+    if (!project) {
+      throw new NotFoundException(`Project '${projectIdOrCode}' not found`);
+    }
+    return project.id;
+  }
+
   /**
    * GET /projects/:id/members
    * Lists all members of a project with their assigned roles.
+   * Accepts both UUID and short project code (e.g. PRJ-001).
    */
-  async getMembers(projectId: string) {
-    await this.findOne(projectId); // ensures project exists
+  async getMembers(projectIdOrCode: string) {
+    const projectId = await this.resolveProjectId(projectIdOrCode);
 
     const members = await this.prisma.userRole.findMany({
       where: { projectId },
@@ -370,14 +396,15 @@ export class ProjectsService {
   /**
    * POST /projects/:id/members
    * Adds a user to a project with the given role.
+   * Accepts both UUID and short project code (e.g. PRJ-001).
    */
   async addMember(
-    projectId: string,
+    projectIdOrCode: string,
     targetUserId: string,
     roleId: string,
     assignedById: string,
   ) {
-    await this.findOne(projectId); // ensures project exists
+    const projectId = await this.resolveProjectId(projectIdOrCode);
 
     const userExists = await this.prisma.user.findUnique({ where: { id: targetUserId } });
     if (!userExists) throw new NotFoundException(`User ${targetUserId} not found`);
@@ -417,8 +444,10 @@ export class ProjectsService {
   /**
    * DELETE /projects/:id/members/:userId
    * Removes a user's role assignment from a project.
+   * Accepts both UUID and short project code.
    */
-  async removeMember(projectId: string, targetUserId: string) {
+  async removeMember(projectIdOrCode: string, targetUserId: string) {
+    const projectId = await this.resolveProjectId(projectIdOrCode);
     const existing = await this.prisma.userRole.findFirst({
       where: { userId: targetUserId, projectId },
     });
@@ -453,12 +482,12 @@ export class ProjectsService {
    * cannot UPDATE it in place — must delete + recreate atomically.
    */
   async updateMemberRole(
-    projectId: string,
+    projectIdOrCode: string,
     targetUserId: string,
     newRoleId: string,
     assignedById: string,
   ) {
-    await this.findOne(projectId);
+    const projectId = await this.resolveProjectId(projectIdOrCode);
 
     const existing = await this.prisma.userRole.findFirst({
       where: { userId: targetUserId, projectId },

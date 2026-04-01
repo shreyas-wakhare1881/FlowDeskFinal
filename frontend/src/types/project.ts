@@ -57,7 +57,17 @@ export interface Project {
   }[];
   createdAt: string;
   updatedAt: string;
-}
+  // ── Project Settings ─────────────────────────
+  projectKey?: string;
+  visibility?: 'PRIVATE' | 'PUBLIC';  // ── Live RBAC member data (from userRoles relation) ──────────────
+  userRoles?: {
+    userId: string;
+    user: { id: string; name: string; email: string };
+    role: { id: string; name: string };
+    assignedAt?: string;
+  }[];
+  // ── Derived counters from _count ────────────────────────
+  _count?: { issues: number };}
 
 export interface CreateProjectDto {
   projectName: string;
@@ -110,6 +120,8 @@ export interface UpdateProjectDto {
   dueDate?: Date | string;
   completedDate?: Date | string;
   teamName?: string;
+  projectKey?: string;
+  visibility?: 'PRIVATE' | 'PUBLIC';
   metrics?: {
     completionPercentage?: number;
     tasksTotal?: number;

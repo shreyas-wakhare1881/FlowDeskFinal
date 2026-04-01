@@ -36,7 +36,13 @@ export type Permission =
   | 'VIEW_COMMENT'
   | 'DELETE_COMMENT'
   // Users (SuperAdmin only)
-  | 'MANAGE_USERS';
+  | 'MANAGE_USERS'
+  // Issues (Jira-style hierarchy)
+  | 'CREATE_ISSUE'
+  | 'READ_ISSUE'
+  | 'UPDATE_ISSUE'
+  | 'DELETE_ISSUE'
+  | 'MANAGE_ISSUES';
 
 // ── Role → Permission map (mirrors seed.ts ROLE_PERMISSIONS) ─────────────────
 
@@ -52,6 +58,7 @@ const ALL_PERMISSIONS: readonly Permission[] = [
   'VIEW_REPORTS',
   'ADD_COMMENT', 'VIEW_COMMENT', 'DELETE_COMMENT',
   'MANAGE_USERS',
+  'CREATE_ISSUE', 'READ_ISSUE', 'UPDATE_ISSUE', 'DELETE_ISSUE', 'MANAGE_ISSUES',
 ];
 
 export const ROLE_PERMISSIONS: Record<AppRole, readonly Permission[]> = {
@@ -66,12 +73,14 @@ export const ROLE_PERMISSIONS: Record<AppRole, readonly Permission[]> = {
     'VIEW_PROJECT',
     'VIEW_TEAM',
     'ADD_COMMENT', 'VIEW_COMMENT',
+    'CREATE_ISSUE', 'READ_ISSUE', 'UPDATE_ISSUE',
   ],
 
   Client: [
     'READ_TASK',
     'VIEW_PROJECT',
     'VIEW_COMMENT',
+    'READ_ISSUE',
   ],
 };
 

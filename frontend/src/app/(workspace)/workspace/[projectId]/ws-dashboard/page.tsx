@@ -7,7 +7,10 @@ import WsTopbar from '@/components/workspace/WsTopbar';
 import StatsCard from '@/components/dashboard/StatsCard';
 import { tasksService } from '@/lib/tasks.service';
 import { projectsService } from '@/lib/projects.service';
+import { issuesService } from '@/lib/issues.service';
+import { useCurrentUser } from '@/lib/hooks/useCurrentUser';
 import type { Task } from '@/types/task';
+import type { Issue } from '@/types/issue';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 function getGreeting(): string {
@@ -144,15 +147,17 @@ export default function WsDashboardPage() {
   const params  = useParams();
   const router  = useRouter();
   const projectId = params.projectId as string;
+  const currentUser = useCurrentUser();
 
   const [tasks,       setTasks]       = useState<Task[]>([]);
+  const [myIssues,    setMyIssues]    = useState<Issue[]>([]);
   const [projectName, setProjectName] = useState<string>('');
   const [loading,     setLoading]     = useState(true);
   const [filter,      setFilter]      = useState<'all' | 'todo' | 'in-progress' | 'completed' | 'overdue'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showAll,     setShowAll]     = useState(false);
 
-  // ── Fetch project name + tasks in parallel ─────────────────────────────────
+  // ── Fetch project name + tasks + my issues in parallel ────────────────────
   useEffect(() => {
     async function load() {
       try {
@@ -168,6 +173,14 @@ export default function WsDashboardPage() {
     }
     load();
   }, [projectId]);
+
+  // Fetch my issues separately (depends on currentUser.id being populated after mount)
+  useEffect(() => {
+    if (!currentUser.id) return;
+    issuesService.getAll(projectId, undefined, currentUser.id)
+      .then(setMyIssues)
+      .catch(() => setMyIssues([]));
+  }, [projectId, currentUser.id]);
 
   // ── Stats ──────────────────────────────────────────────────────────────────
   const stats = useMemo(() => ({
@@ -393,9 +406,147 @@ export default function WsDashboardPage() {
               </>
             )}
 
+            {/* ── My Issues ─────────────────────────────────────────────── */}
+            <MyIssuesSection issues={myIssues} />
+
           </div>
         </main>
       </div>
+    </div>
+  );
+}
+
+// ── My Issues Section Component ────────────────────────────────────────────────
+
+const ISSUE_TYPE_CONFIG = {
+  EPIC:  { label: 'Epic',  bg: '#f3f0ff', text: '#6d28d9', icon: (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+    </svg>
+  )},
+  STORY: { label: 'Story', bg: '#eff6ff', text: '#1d4ed8', icon: (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+    </svg>
+  )},
+  TASK:  { label: 'Task',  bg: '#f0fdf4', text: '#15803d', icon: (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12"/>
+    </svg>
+  )},
+} as const;
+
+const STATUS_CONFIG = {
+  TODO:        { label: 'To Do',       bg: '#f8fafc', text: '#64748b', border: '#e2e8f0' },
+  IN_PROGRESS: { label: 'In Progress', bg: '#eff6ff', text: '#1d4ed8', border: '#bfdbfe' },
+  DONE:        { label: 'Done',        bg: '#f0fdf4', text: '#15803d', border: '#bbf7d0' },
+} as const;
+
+const PRIORITY_DOT: Record<string, string> = {
+  HIGH:   '#ef4444',
+  MEDIUM: '#f59e0b',
+  LOW:    '#3b82f6',
+};
+
+function MyIssuesSection({ issues }: { issues: Issue[] }) {
+  const columns = [
+    { key: 'TODO',        label: 'To Do'       },
+    { key: 'IN_PROGRESS', label: 'In Progress'  },
+    { key: 'DONE',        label: 'Done'         },
+  ] as const;
+
+  const byStatus = (status: string) => issues.filter(i => i.status === status);
+
+  return (
+    <div className="mt-8">
+      {/* Header */}
+      <div className="flex items-center gap-3 mb-4">
+        <div className="flex items-center gap-2">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+            stroke="#4361ee" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+            <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+          </svg>
+          <h3 className="text-[1.1rem] font-semibold text-[#1a1a2e] tracking-tight">My Issues</h3>
+        </div>
+        <span className="px-2.5 py-0.5 bg-[#eff3ff] text-[#4361ee] rounded-full text-[0.74rem] font-bold">
+          {issues.length}
+        </span>
+      </div>
+
+      {issues.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-slate-100 py-12 flex flex-col items-center gap-3">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none"
+            stroke="#cbd5e1" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+          </svg>
+          <p className="text-sm text-slate-400 font-medium">No issues assigned to you in this project</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {columns.map(col => {
+            const colIssues = byStatus(col.key);
+            const sCfg = STATUS_CONFIG[col.key];
+            return (
+              <div key={col.key} className="bg-white rounded-2xl border border-slate-100 p-4">
+                {/* Column header */}
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span style={{
+                      display: 'inline-block', width: '8px', height: '8px',
+                      borderRadius: '50%', background: sCfg.text,
+                    }} />
+                    <span className="text-xs font-semibold text-slate-600">{col.label}</span>
+                  </div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                    style={{ background: sCfg.bg, color: sCfg.text, border: `1px solid ${sCfg.border}` }}>
+                    {colIssues.length}
+                  </span>
+                </div>
+
+                {/* Issue cards */}
+                <div className="flex flex-col gap-2">
+                  {colIssues.length === 0 ? (
+                    <div className="py-6 text-center text-xs text-slate-300 font-medium">
+                      No issues
+                    </div>
+                  ) : (
+                    colIssues.map(issue => {
+                      const tCfg = ISSUE_TYPE_CONFIG[issue.type as keyof typeof ISSUE_TYPE_CONFIG]
+                               ?? ISSUE_TYPE_CONFIG.TASK;
+                      const priorityColor = PRIORITY_DOT[issue.priority] ?? '#94a3b8';
+                      return (
+                        <div key={issue.id}
+                          className="p-3 rounded-xl border border-slate-100 hover:border-blue-200 hover:shadow-sm transition-all cursor-pointer group"
+                          style={{ background: '#fafafa' }}
+                        >
+                          {/* Type badge + issue key */}
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold"
+                              style={{ background: tCfg.bg, color: tCfg.text }}>
+                              {tCfg.icon}
+                              {tCfg.label}
+                            </span>
+                            <span className="text-[10px] font-mono text-slate-400">{issue.issueKey}</span>
+                            {/* Priority dot */}
+                            <span className="ml-auto w-2 h-2 rounded-full flex-shrink-0"
+                              style={{ background: priorityColor }} />
+                          </div>
+
+                          {/* Title */}
+                          <p className="text-xs font-semibold text-slate-800 line-clamp-2 group-hover:text-blue-700 transition-colors leading-relaxed">
+                            {issue.title}
+                          </p>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

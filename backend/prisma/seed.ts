@@ -348,6 +348,7 @@ async function main() {
     { name: 'REPORTS',  description: 'Analytics and reporting' },
     { name: 'COMMENTS', description: 'Task and project comments' },
     { name: 'USERS',    description: 'User account management (SuperAdmin only)' },
+    { name: 'ISSUES',   description: 'Jira-style hierarchical issue tracking (EPIC/STORY/TASK)' },
   ];
 
   for (const m of MODULES) {
@@ -383,6 +384,12 @@ async function main() {
     { name: 'DELETE_COMMENT', action: 'DELETE', moduleName: 'COMMENTS', description: 'Delete any comment' },
     // USERS
     { name: 'MANAGE_USERS',   action: 'MANAGE', moduleName: 'USERS',    description: 'Create, deactivate and manage user accounts' },
+    // ISSUES
+    { name: 'CREATE_ISSUE',   action: 'CREATE', moduleName: 'ISSUES',   description: 'Create new issues (EPIC, STORY, TASK) in a project' },
+    { name: 'READ_ISSUE',     action: 'READ',   moduleName: 'ISSUES',   description: 'View issues in a project' },
+    { name: 'UPDATE_ISSUE',   action: 'UPDATE', moduleName: 'ISSUES',   description: 'Update issue details, status and assignee' },
+    { name: 'DELETE_ISSUE',   action: 'DELETE', moduleName: 'ISSUES',   description: 'Delete issues from a project' },
+    { name: 'MANAGE_ISSUES',  action: 'MANAGE', moduleName: 'ISSUES',   description: 'Full control over all issues in a project' },
   ];
 
   // Fetch all modules into a lookup map
@@ -406,26 +413,56 @@ async function main() {
   // ── Step 4: Seed role_permissions ────────────────────────────
   // role → list of permission names it should have
   const ROLE_PERMISSIONS: Record<string, string[]> = {
+    // SuperAdmin: MANAGE_* permissions + all explicit CRUD (belt-and-suspenders).
+    // PermissionGuard also has a role-name bypass for SuperAdmin, but explicit
+    // permissions keep the DB consistent and auditable.
     SuperAdmin: [
-      'MANAGE_TASKS', 'MANAGE_PROJECTS', 'MANAGE_TEAM', 'MANAGE_USERS',
-      'VIEW_REPORTS', 'ADD_COMMENT', 'VIEW_COMMENT', 'DELETE_COMMENT',
+      // Tasks
+      'CREATE_TASK', 'READ_TASK', 'UPDATE_TASK', 'DELETE_TASK', 'MANAGE_TASKS',
+      // Projects
+      'VIEW_PROJECT', 'UPDATE_PROJECT', 'MANAGE_PROJECTS',
+      // Teams
+      'VIEW_TEAM', 'MANAGE_TEAM',
+      // Reports
+      'VIEW_REPORTS',
+      // Comments
+      'ADD_COMMENT', 'VIEW_COMMENT', 'DELETE_COMMENT',
+      // Users
+      'MANAGE_USERS',
+      // Issues — explicit CRUD + MANAGE so DB is fully populated
+      'CREATE_ISSUE', 'READ_ISSUE', 'UPDATE_ISSUE', 'DELETE_ISSUE', 'MANAGE_ISSUES',
     ],
-    // Manager now mirrors SuperAdmin permissions but remains project-scoped.
-    // SuperAdmin = global scope; Manager = full control within their project.
+    // Manager = full control within their project (project-scoped SuperAdmin).
+    // Must have ALL explicit CRUD issue permissions so the PermissionGuard
+    // literal-match AND the MANAGE_* override both work correctly.
     Manager: [
-      'MANAGE_TASKS', 'MANAGE_PROJECTS', 'MANAGE_TEAM', 'MANAGE_USERS',
-      'VIEW_REPORTS', 'ADD_COMMENT', 'VIEW_COMMENT', 'DELETE_COMMENT',
+      // Tasks
+      'CREATE_TASK', 'READ_TASK', 'UPDATE_TASK', 'DELETE_TASK', 'MANAGE_TASKS',
+      // Projects
+      'VIEW_PROJECT', 'UPDATE_PROJECT', 'MANAGE_PROJECTS',
+      // Teams
+      'VIEW_TEAM', 'MANAGE_TEAM',
+      // Reports
+      'VIEW_REPORTS',
+      // Comments
+      'ADD_COMMENT', 'VIEW_COMMENT', 'DELETE_COMMENT',
+      // Users
+      'MANAGE_USERS',
+      // Issues — explicit CRUD + MANAGE
+      'CREATE_ISSUE', 'READ_ISSUE', 'UPDATE_ISSUE', 'DELETE_ISSUE', 'MANAGE_ISSUES',
     ],
     Developer: [
       'READ_TASK', 'UPDATE_TASK',
       'VIEW_PROJECT',
       'VIEW_TEAM',
       'ADD_COMMENT', 'VIEW_COMMENT',
+      'CREATE_ISSUE', 'READ_ISSUE', 'UPDATE_ISSUE',
     ],
     Client: [
       'READ_TASK',
       'VIEW_PROJECT',
       'VIEW_COMMENT',
+      'READ_ISSUE',
     ],
   };
 

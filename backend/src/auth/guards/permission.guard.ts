@@ -95,12 +95,37 @@ export class PermissionGuard implements CanActivate {
     const permissionNames = rolePermissions.map((rp) => rp.permission.name);
 
     // ── 7. Check if required permission is present ────────────────────────────
-    if (!permissionNames.includes(requiredPermission)) {
-      throw new ForbiddenException(
-        `You do not have the '${requiredPermission}' permission in this project`,
-      );
+    // Direct match: user has the exact permission
+    if (permissionNames.includes(requiredPermission)) {
+      return true;
     }
 
-    return true;
+    // MANAGE_* super-permission: a user with MANAGE_ISSUES automatically satisfies
+    // CREATE_ISSUE, READ_ISSUE, UPDATE_ISSUE, DELETE_ISSUE.
+    // Note: permission names use the singular module suffix (CREATE_ISSUE) while
+    // the MANAGE permission uses the plural (MANAGE_ISSUES). We handle both by
+    // checking whether the managed module name starts-with the required module suffix
+    // or vice-versa (e.g., "ISSUES".startsWith("ISSUE") → true).
+    const [, ...requiredModuleWords] = requiredPermission.split('_');
+    const requiredModuleSuffix = requiredModuleWords.join('_'); // e.g., "ISSUE"
+
+    const hasManageOverride = permissionNames.some((perm) => {
+      if (!perm.startsWith('MANAGE_')) return false;
+      const managedSuffix = perm.slice('MANAGE_'.length); // e.g., "ISSUES"
+      // Accepts both exact match and singular/plural variants
+      return (
+        managedSuffix === requiredModuleSuffix ||
+        managedSuffix.startsWith(requiredModuleSuffix) ||
+        requiredModuleSuffix.startsWith(managedSuffix)
+      );
+    });
+
+    if (hasManageOverride) {
+      return true;
+    }
+
+    throw new ForbiddenException(
+      `You do not have the '${requiredPermission}' permission in this project`,
+    );
   }
 }

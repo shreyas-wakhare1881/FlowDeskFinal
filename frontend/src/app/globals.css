@@ -178,6 +178,12 @@ body {
   color: white !important;
 }
 
+/* ── Actions ⋮ button hover effect ─────────────────────────────── */
+.pc-actions-btn:hover {
+  background: var(--pc-hover-bg, #f3f4f6) !important;
+  border-color: var(--pc-border, #e5e7eb) !important;
+}
+
 /* ── Header: title + status badge ──────────────────────────────── */
 .pc-header {
   display: flex;

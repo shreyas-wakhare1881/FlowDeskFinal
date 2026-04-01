@@ -36,6 +36,10 @@ export interface MockProject {
   tags?: string[];
   teamMembers?: { avatar: string; color: string; name: string }[];
   teams?: ParticipatingTeam[];
+  /** Live RBAC members (from userRoles relation) — used for avatar row + member count */
+  rbacMembers?: { userId: string; name: string; email: string; roleName: string }[];
+  /** Issue count from the issues table */
+  issueCount?: number;
 }
 
 // ── Helper: format ISO date to "Mar 10, 2026" ────────────────────────────────
@@ -76,6 +80,15 @@ function mapApiToMock(p: ApiProject & {
       teamName: t.teamName,
       members:  t.members ?? [],
     })),
+    // Live RBAC members from userRoles relation
+    rbacMembers: (p as any).userRoles?.map((ur: any) => ({
+      userId:   ur.user?.id ?? ur.userId,
+      name:     ur.user?.name ?? '',
+      email:    ur.user?.email ?? '',
+      roleName: ur.role?.name ?? '',
+    })) ?? [],
+    // Issue count from _count
+    issueCount: (p as any)._count?.issues ?? 0,
   };
 }
 
