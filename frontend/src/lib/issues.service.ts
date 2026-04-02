@@ -24,6 +24,13 @@ export const issuesService = {
     return api.get<Issue[]>(`/issues?${params.toString()}`);
   },
 
+  /**
+   * Get only Task / Bug / Story issues (no EPICs) — for the Kanban board.
+   * Server-side filtering is more efficient than client-side type exclusion.
+   */
+  getKanban: (projectId: string): Promise<Issue[]> =>
+    api.get<Issue[]>(`/issues/kanban?projectId=${encodeURIComponent(projectId)}`),
+
   /** Get nested tree for a project — root items have parentId===null (any type) */
   getTree: (projectId: string): Promise<IssueTree[]> =>
     api.get<IssueTree[]>(`/issues/tree?projectId=${encodeURIComponent(projectId)}`),
@@ -35,6 +42,13 @@ export const issuesService = {
   /** Update an issue (partial patch) */
   update: (id: string, data: UpdateIssuePayload): Promise<IssueDetail> =>
     api.patch<IssueDetail>(`/issues/${id}`, data),
+
+  /**
+   * Mark an EPIC as completed (or un-complete it).
+   * PATCH /issues/:id/complete  Body: { isCompleted: boolean, projectId: string }
+   */
+  completeEpic: (id: string, projectId: string, isCompleted: boolean): Promise<Issue> =>
+    api.patch<Issue>(`/issues/${id}/complete`, { isCompleted, projectId }),
 
   /** Delete an issue — projectId sent as query param for PermissionGuard */
   delete: (id: string, projectId: string): Promise<{ deleted: boolean; id: string }> =>

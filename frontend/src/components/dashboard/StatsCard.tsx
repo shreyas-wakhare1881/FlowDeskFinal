@@ -6,7 +6,7 @@ interface StatsCardProps {
   label: string;
   value: number;
   trend: string;
-  icon: string;
+  icon: React.ReactNode;
   variant: 'info' | 'success' | 'warning';
   onClick?: () => void;
 }

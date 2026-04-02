@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { useIssues } from '@/lib/IssuesContext';
 import { useIssueModal } from '@/lib/IssueModalContext';
+import { issuesService } from '@/lib/issues.service';
 import type { IssueEpic, IssueStory, IssueTask, IssueStatus, IssuePriority, IssueType, Issue } from '@/types/issue';
 
 // ── SVG type icons ────────────────────────────────────────────────────────────
@@ -206,6 +207,7 @@ function StoryRow({ story, isOpen, onToggle, onCreateTask, onOpen }: StoryRowPro
 
 interface EpicRowProps {
   epic: IssueEpic;
+  projectId: string;
   isOpen: boolean;
   storyOpenMap: Record<string, boolean>;
   onToggleEpic: () => void;
@@ -215,26 +217,42 @@ interface EpicRowProps {
   onOpen: (id: string) => void;
 }
 
-function EpicRow({ epic, isOpen, storyOpenMap, onToggleEpic, onToggleStory, onCreateStory, onCreateTask, onOpen }: EpicRowProps) {
+function EpicRow({ epic, projectId, isOpen, storyOpenMap, onToggleEpic, onToggleStory, onCreateStory, onCreateTask, onOpen }: EpicRowProps) {
   const badge = TYPE_BADGE['EPIC'];
+  const { refresh } = useIssues();
+  // Initialize from server state so refreshes persist the done state
+  const [isDone, setIsDone] = useState(epic.isCompleted ?? false);
+  const [isPersisting, setIsPersisting] = useState(false);
 
-  const totalTasks = epic.children.reduce((sum, s) => sum + s.children.length, 0);
-  const doneTasks = epic.children.reduce(
-    (sum, s) => sum + s.children.filter((t) => t.status === 'DONE').length,
-    0,
-  );
-  const pct = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
+  const handleToggleDone = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const next = !isDone;
+    setIsDone(next); // optimistic update
+    setIsPersisting(true);
+    try {
+      await issuesService.completeEpic(epic.id, projectId, next);
+      refresh(); // keep context in sync
+    } catch {
+      setIsDone(!next); // revert on failure
+    } finally {
+      setIsPersisting(false);
+    }
+  };
 
   return (
-    <div className="mb-3">
-      {/* Epic header row */}
+    <div className={`mb-3 transition-opacity duration-300 ${isDone ? 'opacity-60' : ''}`}>
+      {/* Epic header row — container only */}
       <div
-        className="flex items-center gap-3 px-4 py-3 bg-purple-50 hover:bg-purple-100/70 border border-purple-100 rounded-xl transition-colors group cursor-pointer"
+        className={`flex items-center gap-3 px-4 py-3 border rounded-xl transition-colors group cursor-pointer ${
+          isDone
+            ? 'bg-emerald-50 border-emerald-200'
+            : 'bg-purple-50 hover:bg-purple-100/70 border-purple-100'
+        }`}
         onClick={onToggleEpic}
       >
         {/* Expand toggle */}
         <button
-          className="w-5 h-5 flex items-center justify-center text-purple-400 flex-shrink-0"
+          className={`w-5 h-5 flex items-center justify-center flex-shrink-0 ${isDone ? 'text-emerald-400' : 'text-purple-400'}`}
           onClick={(e) => { e.stopPropagation(); onToggleEpic(); }}
         >
           <svg
@@ -256,49 +274,29 @@ function EpicRow({ epic, isOpen, storyOpenMap, onToggleEpic, onToggleStory, onCr
         {/* Key */}
         <span className="text-[10px] font-mono text-purple-400 w-24 flex-shrink-0">{epic.issueKey}</span>
 
-        {/* Title — click opens detail */}
+        {/* Title */}
         <span
           onClick={(e) => { e.stopPropagation(); onOpen(epic.id); }}
-          className="flex-1 text-sm font-bold text-slate-900 truncate hover:text-purple-700 transition-colors cursor-pointer"
+          className={`flex-1 text-sm font-bold truncate hover:text-purple-700 transition-colors cursor-pointer ${
+            isDone ? 'line-through text-slate-500' : 'text-slate-900'
+          }`}
         >{epic.title}</span>
 
-        {/* Story count */}
-        <span className="text-[10px] text-slate-500 flex-shrink-0">
-          {epic.children.length} stor{epic.children.length !== 1 ? 'ies' : 'y'} · {totalTasks} task{totalTasks !== 1 ? 's' : ''}
-        </span>
-
-        {/* Mini progress bar */}
-        {totalTasks > 0 && (
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            <div className="w-16 h-1.5 bg-purple-100 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-purple-500 rounded-full transition-all duration-700"
-                style={{ width: `${pct}%` }}
-              />
-            </div>
-            <span className="text-[10px] text-purple-600 font-semibold">{pct}%</span>
-          </div>
-        )}
-
-        {/* Priority dot */}
-        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${PRIORITY_DOT[epic.priority]}`} title={epic.priority} />
-
-        {/* Status */}
-        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${STATUS_PILL[epic.status]}`}>
-          {STATUS_LABEL[epic.status]}
-        </span>
-
-        {/* Assignee */}
-        {epic.assignee ? (
-          <div
-            className="w-6 h-6 rounded-md bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0"
-            title={epic.assignee.name}
-          >
-            {getInitials(epic.assignee.name)}
-          </div>
-        ) : (
-          <div className="w-6 h-6 rounded-md border-2 border-dashed border-purple-200 flex-shrink-0" title="Unassigned" />
-        )}
+        {/* ✔ Mark Epic as Done */}
+        <button
+          onClick={handleToggleDone}
+          title={isDone ? 'Mark as not done' : 'Mark Epic as done'}
+          disabled={isPersisting}
+          className={`flex items-center justify-center w-6 h-6 rounded-full border-2 transition-all flex-shrink-0 disabled:opacity-50 ${
+            isDone
+              ? 'bg-emerald-500 border-emerald-500 text-white shadow-sm'
+              : 'border-slate-300 text-transparent hover:border-emerald-400 hover:text-emerald-400'
+          }`}
+        >
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+        </button>
 
         {/* Quick-add Story */}
         <button
@@ -314,7 +312,7 @@ function EpicRow({ epic, isOpen, storyOpenMap, onToggleEpic, onToggleStory, onCr
       {isOpen && (
         <div className="mt-1 space-y-0.5 overflow-hidden" style={{ animation: 'backlogSlideIn 0.15s ease-out' }}>
           {epic.children.length === 0 ? (
-            <div className="ml-8 px-4 py-2 text-xs text-slate-400 italic">No stories yet</div>
+            <div className="ml-8 px-4 py-2 text-xs text-slate-400 italic">No stories yet — add one with the + button</div>
           ) : (
             epic.children.map((story) => (
               <StoryRow
@@ -328,6 +326,95 @@ function EpicRow({ epic, isOpen, storyOpenMap, onToggleEpic, onToggleStory, onCr
             ))
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+// ── OrphanIssueRow ────────────────────────────────────────────────────────────
+// An unparented (parentId=null, non-EPIC) issue row with a ✔ mark-done button.
+
+function OrphanIssueRow({
+  issue,
+  projectId,
+  onOpen,
+}: {
+  issue: Issue;
+  projectId: string;
+  onOpen: (id: string) => void;
+}) {
+  const { refresh } = useIssues();
+  const badge = TYPE_BADGE[issue.type] ?? TYPE_BADGE.TASK;
+  const [isDone, setIsDone] = useState(issue.status === 'DONE');
+  const [isPersisting, setIsPersisting] = useState(false);
+
+  const handleToggleDone = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const next = !isDone;
+    setIsDone(next);
+    setIsPersisting(true);
+    try {
+      await issuesService.update(issue.id, {
+        projectId,
+        status: next ? 'DONE' : 'TODO',
+      });
+      refresh();
+    } catch {
+      setIsDone(!next); // revert on failure
+    } finally {
+      setIsPersisting(false);
+    }
+  };
+
+  return (
+    <div
+      className={`flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 rounded-xl transition-all group cursor-pointer ${isDone ? 'opacity-60' : ''}`}
+      onClick={() => onOpen(issue.id)}
+    >
+      {/* Mark Done radio button */}
+      <button
+        onClick={handleToggleDone}
+        disabled={isPersisting}
+        title={isDone ? 'Mark as not done' : 'Mark as done'}
+        className={`flex items-center justify-center w-5 h-5 rounded-full border-2 transition-all flex-shrink-0 disabled:opacity-50 ${
+          isDone
+            ? 'bg-emerald-500 border-emerald-500 text-white shadow-sm'
+            : 'border-slate-300 text-transparent hover:border-emerald-400 hover:text-emerald-400'
+        }`}
+      >
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+      </button>
+
+      {/* Type badge */}
+      <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0 ${badge.pill}`}>
+        <TypeIcon type={issue.type} /> {badge.label}
+      </span>
+
+      {/* Key */}
+      <span className="text-[10px] font-mono text-slate-400 w-24 flex-shrink-0">{issue.issueKey}</span>
+
+      {/* Title */}
+      <span className={`flex-1 text-sm truncate ${isDone ? 'line-through text-slate-400' : 'text-slate-700'}`}>
+        {issue.title}
+      </span>
+
+      {/* Status pill */}
+      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${STATUS_PILL[issue.status]}`}>
+        {STATUS_LABEL[issue.status]}
+      </span>
+
+      {/* Assignee avatar */}
+      {issue.assignee ? (
+        <div
+          className="w-6 h-6 rounded-md bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0"
+          title={issue.assignee.name}
+        >
+          {getInitials(issue.assignee.name)}
+        </div>
+      ) : (
+        <div className="w-6 h-6 rounded-md border-2 border-dashed border-slate-200 flex-shrink-0" title="Unassigned" />
       )}
     </div>
   );
@@ -412,15 +499,12 @@ export default function BacklogView() {
 
   return (
     <>
-      {/* Column headers */}
+      {/* Column headers — no status/who since Epics are container-only */}
       <div className="flex items-center gap-3 px-4 py-2 mb-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100">
         <span className="w-5 flex-shrink-0" />
         <span className="w-14 flex-shrink-0" />
         <span className="w-24 flex-shrink-0">Key</span>
         <span className="flex-1">Title</span>
-        <span className="w-8 flex-shrink-0" />
-        <span className="w-20 flex-shrink-0">Status</span>
-        <span className="w-6 flex-shrink-0">Who</span>
         <span className="w-6 flex-shrink-0" />
       </div>
 
@@ -431,6 +515,7 @@ export default function BacklogView() {
             <EpicRow
               key={epic.id}
               epic={epic}
+              projectId={params.projectId as string}
               isOpen={!!epicOpenMap[epic.id]}
               storyOpenMap={storyOpenMap}
               onToggleEpic={() => toggleEpic(epic.id)}
@@ -454,34 +539,14 @@ export default function BacklogView() {
             <div className="h-px flex-1 bg-slate-200" />
           </div>
           <div className="space-y-0.5">
-            {orphanIssues.map((issue) => {
-              const badge = TYPE_BADGE[issue.type] ?? TYPE_BADGE.TASK;
-              return (
-                <div
-                  key={issue.id}
-                  onClick={() => handleOpen(issue.id)}
-                  className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 rounded-xl transition-colors group cursor-pointer"
-                >
-                  <span className="w-5 flex-shrink-0" />
-                  <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0 ${badge.pill}`}>
-                    <TypeIcon type={issue.type} /> {badge.label}
-                  </span>
-                  <span className="text-[10px] font-mono text-slate-400 w-24 flex-shrink-0">{issue.issueKey}</span>
-                  <span className="flex-1 text-sm text-slate-700 truncate">{issue.title}</span>
-                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${PRIORITY_DOT[issue.priority]}`} title={issue.priority} />
-                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${STATUS_PILL[issue.status]}`}>
-                    {STATUS_LABEL[issue.status]}
-                  </span>
-                  {issue.assignee ? (
-                    <div className="w-6 h-6 rounded-md bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0" title={issue.assignee.name}>
-                      {getInitials(issue.assignee.name)}
-                    </div>
-                  ) : (
-                    <div className="w-6 h-6 rounded-md border-2 border-dashed border-slate-200 flex-shrink-0" title="Unassigned" />
-                  )}
-                </div>
-              );
-            })}
+            {orphanIssues.map((issue) => (
+              <OrphanIssueRow
+                key={issue.id}
+                issue={issue}
+                projectId={projectId}
+                onOpen={handleOpen}
+              />
+            ))}
           </div>
         </div>
       )}

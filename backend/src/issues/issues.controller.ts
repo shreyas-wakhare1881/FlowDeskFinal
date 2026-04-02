@@ -8,6 +8,7 @@ import {
   Param,
   Query,
   UseGuards,
+  Req,
 } from '@nestjs/common';
 import { IssueType } from '@prisma/client';
 import { IssuesService } from './issues.service';
@@ -21,21 +22,34 @@ import { RequirePermission } from '../auth/decorators/require-permission.decorat
 export class IssuesController {
   constructor(private readonly issuesService: IssuesService) {}
 
-  // POST /api/issues
-  @Post()
-  @UseGuards(PermissionGuard)
-  @RequirePermission('CREATE_ISSUE')
-  create(@Body() dto: CreateIssueDto) {
-    return this.issuesService.create(dto);
-  }
+  // ── Routes that must come BEFORE /:id ────────────────────────────────────
 
   // GET /api/issues/tree?projectId=<id>
-  // MUST be declared before GET /api/issues/:id so "tree" is not treated as :id
   @Get('tree')
   @UseGuards(PermissionGuard)
   @RequirePermission('READ_ISSUE')
   getTree(@Query('projectId') projectId: string) {
     return this.issuesService.getTree(projectId);
+  }
+
+  // GET /api/issues/kanban?projectId=<id>
+  // Returns ONLY Task / Bug / Story — excludes EPIC — for the Kanban board view.
+  @Get('kanban')
+  @UseGuards(PermissionGuard)
+  @RequirePermission('READ_ISSUE')
+  getKanban(@Query('projectId') projectId: string) {
+    return this.issuesService.getKanban(projectId);
+  }
+
+  // ── Standard CRUD ────────────────────────────────────────────────────────
+
+  // POST /api/issues
+  @Post()
+  @UseGuards(PermissionGuard)
+  @RequirePermission('CREATE_ISSUE')
+  create(@Body() dto: CreateIssueDto, @Req() req: any) {
+    dto.reporterId = req.user.userId;
+    return this.issuesService.create(dto);
   }
 
   // GET /api/issues?projectId=<id>&type=EPIC&assigneeId=<uuid>&q=search
@@ -56,7 +70,6 @@ export class IssuesController {
   @UseGuards(PermissionGuard)
   @RequirePermission('READ_ISSUE')
   findOne(@Param('id') id: string, @Query('projectId') projectId: string) {
-    // projectId in query is used by PermissionGuard for project context
     return this.issuesService.findOne(id);
   }
 
@@ -66,6 +79,18 @@ export class IssuesController {
   @RequirePermission('UPDATE_ISSUE')
   update(@Param('id') id: string, @Body() dto: UpdateIssueDto) {
     return this.issuesService.update(id, dto);
+  }
+
+  // PATCH /api/issues/:id/complete
+  // Toggles isCompleted on an EPIC. Body: { isCompleted: boolean, projectId: string }
+  @Patch(':id/complete')
+  @UseGuards(PermissionGuard)
+  @RequirePermission('UPDATE_ISSUE')
+  completeEpic(
+    @Param('id') id: string,
+    @Body() body: { isCompleted: boolean; projectId: string },
+  ) {
+    return this.issuesService.completeEpic(id, body.isCompleted);
   }
 
   // DELETE /api/issues/:id?projectId=<id>

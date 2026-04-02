@@ -13,6 +13,7 @@ import {
   Request,
 } from '@nestjs/common';
 import { ProjectsService } from './projects.service';
+import { IssuesService } from '../issues/issues.service';
 import { CreateProjectDto, UpdateProjectDto } from './dto/project.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PermissionGuard } from '../auth/guards/permission.guard';
@@ -21,7 +22,10 @@ import { RequirePermission } from '../auth/decorators/require-permission.decorat
 @UseGuards(JwtAuthGuard)
 @Controller('projects')
 export class ProjectsController {
-  constructor(private readonly projectsService: ProjectsService) {}
+  constructor(
+    private readonly projectsService: ProjectsService,
+    private readonly issuesService: IssuesService,
+  ) {}
 
   // ── New RBAC routes — declared BEFORE /:id to avoid route conflicts ────────
 
@@ -127,6 +131,18 @@ export class ProjectsController {
   @Get(':id/permissions')
   getMyPermissions(@Param('id') id: string, @Request() req: any) {
     return this.projectsService.getMyPermissions(id, req.user.userId);
+  }
+
+  /**
+   * GET /projects/:id/progress
+   * Returns per-member task aggregation for the Team Progress section.
+   * Delegates to IssuesService.getProgress() — computed on the fly, nothing stored.
+   */
+  @Get(':id/progress')
+  @UseGuards(PermissionGuard)
+  @RequirePermission('READ_ISSUE')
+  getProgress(@Param('id') id: string) {
+    return this.issuesService.getProgress(id);
   }
 
   /**

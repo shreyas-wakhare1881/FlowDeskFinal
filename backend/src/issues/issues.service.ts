@@ -16,6 +16,7 @@ const ISSUE_SELECT = {
   description: true,
   status: true,
   priority: true,
+  isCompleted: true,
   parentId: true,
   projectId: true,
   assigneeId: true,
@@ -162,6 +163,13 @@ export class IssuesService {
 
     await this.validateHierarchy(dto.type, dto.parentId);
 
+    // ── EPIC container rules ──────────────────────────────────────────────────
+    // EPICs are pure containers: no assignee, no status override, no parent.
+    if (dto.type === IssueType.EPIC) {
+      dto.assigneeId = undefined;
+      dto.status = undefined; // stays as TODO default — not user-settable
+    }
+
     // Validate assignee belongs to the project
     if (dto.assigneeId) {
       const membership = await this.prisma.userRole.findFirst({
@@ -266,6 +274,13 @@ export class IssuesService {
     // Use the type from DTO if changing type, otherwise existing type
     const effectiveType = dto.type ?? existing.type;
 
+    // ── EPIC container rules on update ───────────────────────────────────────
+    // Never allow assigning status or assignee to an EPIC via normal update.
+    if (effectiveType === IssueType.EPIC) {
+      if (dto.assigneeId !== undefined) dto.assigneeId = null;
+      if (dto.status !== undefined) delete dto.status;
+    }
+
     // Re-validate hierarchy only if parentId is being changed
     if (dto.parentId !== undefined && dto.parentId !== existing.parentId) {
       await this.validateHierarchy(effectiveType, dto.parentId);
@@ -305,6 +320,164 @@ export class IssuesService {
       },
       select: ISSUE_DETAIL_SELECT,
     });
+  }
+
+  /**
+   * PATCH /issues/:id/complete
+   * Toggles isCompleted on an EPIC. Non-EPICs throw BadRequest.
+   */
+  async completeEpic(id: string, isCompleted: boolean) {
+    const issue = await this.prisma.issue.findUnique({
+      where: { id },
+      select: { type: true },
+    });
+    if (!issue) throw new NotFoundException(`Issue not found: ${id}`);
+    if (issue.type !== IssueType.EPIC) {
+      throw new BadRequestException('Only EPICs can be marked as completed via this endpoint');
+    }
+    return this.prisma.issue.update({
+      where: { id },
+      data: { isCompleted },
+      select: ISSUE_SELECT,
+    });
+  }
+
+  /**
+   * GET /issues/kanban?projectId=<id>
+   * Returns flat issues excluding EPIC — Task, Bug, Story only.
+   * Includes parentId for accordion grouping on the client.
+   */
+  async getKanban(projectId: string) {
+    const project = await this.prisma.project.findFirst({
+      where: { OR: [{ id: projectId }, { projectID: projectId }] },
+      select: { id: true },
+    });
+    if (!project) throw new NotFoundException(`Project not found: ${projectId}`);
+
+    return this.prisma.issue.findMany({
+      where: {
+        projectId: project.id,
+        type: { not: IssueType.EPIC }, // Kanban shows only Task / Bug / Story
+      },
+      select: ISSUE_SELECT,
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  /**
+   * GET /projects/:id/progress
+   * Returns team progress aggregation — per-member task counts.
+   * Computed on the fly; nothing is stored.
+   *
+   * Response shape:
+   * [
+   *   { userId, name, email, totalTasks, completedTasks, inProgressTasks, todoTasks },
+   *   ... (one entry per project member),
+   *   { userId: 'unassigned', name: 'Unassigned', totalTasks, completedTasks, ... }
+   * ]
+   */
+  async getProgress(projectId: string) {
+    const project = await this.prisma.project.findFirst({
+      where: { OR: [{ id: projectId }, { projectID: projectId }] },
+      select: { id: true },
+    });
+    if (!project) throw new NotFoundException(`Project not found: ${projectId}`);
+
+    // Fetch all non-EPIC issues for the project with assignee info
+    const issues = await this.prisma.issue.findMany({
+      where: {
+        projectId: project.id,
+        type: { not: IssueType.EPIC }, // Progress tracks work items only
+      },
+      select: {
+        id: true,
+        status: true,
+        type: true,
+        assigneeId: true,
+        assignee: { select: { id: true, name: true, email: true } },
+      },
+    });
+
+    // Fetch project members for the full roster (includes members with 0 issues)
+    const members = await this.prisma.userRole.findMany({
+      where: { projectId: project.id },
+      include: { user: { select: { id: true, name: true, email: true } } },
+    });
+
+    // Build a map: userId → counts
+    const progressMap = new Map<string, {
+      userId: string;
+      name: string;
+      email: string;
+      totalTasks: number;
+      completedTasks: number;
+      inProgressTasks: number;
+      todoTasks: number;
+    }>();
+
+    // Seed the map with all project members (so members with 0 tasks appear)
+    for (const m of members) {
+      progressMap.set(m.user.id, {
+        userId: m.user.id,
+        name: m.user.name,
+        email: m.user.email,
+        totalTasks: 0,
+        completedTasks: 0,
+        inProgressTasks: 0,
+        todoTasks: 0,
+      });
+    }
+
+    // Tally the issues
+    let unassignedTotal = 0, unassignedDone = 0, unassignedInProgress = 0, unassignedTodo = 0;
+
+    for (const issue of issues) {
+      if (!issue.assigneeId || !issue.assignee) {
+        // Bucket unassigned issues separately
+        unassignedTotal++;
+        if (issue.status === 'DONE') unassignedDone++;
+        else if (issue.status === 'IN_PROGRESS') unassignedInProgress++;
+        else unassignedTodo++;
+        continue;
+      }
+
+      let entry = progressMap.get(issue.assigneeId);
+      if (!entry) {
+        // Assignee is no longer a member but still has issues — include anyway
+        entry = {
+          userId: issue.assignee.id,
+          name: issue.assignee.name,
+          email: issue.assignee.email,
+          totalTasks: 0,
+          completedTasks: 0,
+          inProgressTasks: 0,
+          todoTasks: 0,
+        };
+        progressMap.set(issue.assigneeId, entry);
+      }
+
+      entry.totalTasks++;
+      if (issue.status === 'DONE') entry.completedTasks++;
+      else if (issue.status === 'IN_PROGRESS') entry.inProgressTasks++;
+      else entry.todoTasks++;
+    }
+
+    const result = Array.from(progressMap.values());
+
+    // Append unassigned bucket if it has any issues
+    if (unassignedTotal > 0) {
+      result.push({
+        userId: 'unassigned',
+        name: 'Unassigned',
+        email: '',
+        totalTasks: unassignedTotal,
+        completedTasks: unassignedDone,
+        inProgressTasks: unassignedInProgress,
+        todoTasks: unassignedTodo,
+      });
+    }
+
+    return result;
   }
 
   async remove(id: string) {

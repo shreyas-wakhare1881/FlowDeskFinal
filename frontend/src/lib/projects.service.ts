@@ -1,5 +1,6 @@
 import { api } from './api';
 import type { Project, CreateProjectDto, UpdateProjectDto, ProjectStats } from '@/types/project';
+import type { TeamProgressEntry } from '@/types/issue';
 
 export interface PaginatedResponse<T> {
   data: T[];
@@ -161,5 +162,14 @@ export const projectsService = {
     roleId: string,
   ): Promise<{ userId: string; name: string; email: string; roleId: string; roleName: string }> => {
     return api.put(`/projects/${projectId}/members/${userId}`, { roleId });
+  },
+
+  /**
+   * Get real-time team progress for a project.
+   * Returns per-member task counts (total, done, in-progress, todo).
+   * Calls: GET /projects/:id/progress
+   */
+  getProgress: async (projectId: string): Promise<TeamProgressEntry[]> => {
+    return api.get<TeamProgressEntry[]>(`/projects/${projectId}/progress`);
   },
 };

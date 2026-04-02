@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -62,7 +62,7 @@ export default function WsCreateTaskPage() {
                 onClick={() => router.push(`/workspace/${projectId}/ws-view?tab=backlog`)}
                 className="px-5 py-2.5 border border-slate-200 text-slate-600 hover:bg-slate-100 text-sm font-semibold rounded-xl transition-colors"
               >
-                Go to Backlog
+                Go to Ladder
               </button>
             </div>
           </div>

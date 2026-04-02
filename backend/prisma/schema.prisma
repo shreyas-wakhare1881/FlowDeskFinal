@@ -375,6 +375,11 @@ model Issue {
   status      IssueStatus   @default(TODO)
   priority    IssuePriority @default(MEDIUM)
 
+  // ── Container flag (EPIC-specific) ───────────────────────────────────────
+  // true when the Epic has been manually marked as done via ✔ button.
+  // For non-EPIC types this stays false and is ignored by the UI.
+  isCompleted Boolean       @default(false)
+
   // Self-relation for hierarchy (EPIC→STORY→TASK→BUG)
   parentId    String?
   parent      Issue?        @relation("IssueChildren", fields: [parentId], references: [id], onDelete: SetNull)
@@ -399,6 +404,7 @@ model Issue {
 
   @@index([projectId])
   @@index([parentId])
+  @@index([assigneeId])   // speeds up Team Progress aggregation
   @@index([status])
   @@index([type])
   @@map("issues")

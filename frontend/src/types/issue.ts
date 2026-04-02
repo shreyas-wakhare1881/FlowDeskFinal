@@ -26,6 +26,8 @@ export interface Issue {
   description: string | null;
   status: IssueStatus;
   priority: IssuePriority;
+  /** EPIC-specific: true when Epic is manually marked done via ✔ button */
+  isCompleted: boolean;
   parentId: string | null;
   projectId: string;
   assigneeId: string | null;
@@ -122,4 +124,17 @@ export interface ProjectMember {
   role: string;
   avatarInitials?: string;
   avatarColor?: string;
+}
+
+// ── Team Progress ─────────────────────────────────────────────────────────────
+
+/** Shape returned by GET /projects/:id/progress */
+export interface TeamProgressEntry {
+  userId: string;
+  name: string;
+  email: string;
+  totalTasks: number;
+  completedTasks: number;
+  inProgressTasks: number;
+  todoTasks: number;
 }
