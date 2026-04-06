@@ -90,6 +90,8 @@ export default function CreateIssueModal({ projectId }: { projectId: string }) {
   const [priority, setPriority] = useState<IssuePriority>('MEDIUM');
   const [parentId, setParentId] = useState('');
   const [assigneeId, setAssigneeId] = useState('');
+  const [estimate, setEstimate] = useState('');
+  const [dueDate, setDueDate] = useState('');
 
   // Data for dropdowns
   const [members, setMembers] = useState<Member[]>([]);
@@ -108,6 +110,8 @@ export default function CreateIssueModal({ projectId }: { projectId: string }) {
       setPriority('MEDIUM');
       setParentId('');
       setAssigneeId('');
+      setEstimate('');
+      setDueDate('');
       setError(null);
     }
   }, [isOpen, defaultType]);
@@ -159,6 +163,8 @@ export default function CreateIssueModal({ projectId }: { projectId: string }) {
         priority,
         parentId: parentId || undefined,
         assigneeId: assigneeId || undefined,
+        estimate: estimate.trim() || undefined,
+        dueDate: dueDate || undefined,
       });
       refresh();
       await refreshProjects();
@@ -170,7 +176,7 @@ export default function CreateIssueModal({ projectId }: { projectId: string }) {
     } finally {
       setSubmitting(false);
     }
-  }, [title, type, parentId, description, priority, assigneeId, projectId, allIssues, refresh, closeModal, refreshProjects]);
+  }, [title, type, parentId, description, priority, assigneeId, estimate, dueDate, projectId, allIssues, refresh, closeModal, refreshProjects]);
 
   // Dismiss on backdrop click or Escape
   const handleBackdropClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
@@ -355,6 +361,63 @@ export default function CreateIssueModal({ projectId }: { projectId: string }) {
                       </option>
                     ))}
                   </select>
+                </div>
+              )}
+
+              {/* Estimate & Due Date (Grid) — hidden for EPIC */}
+              {type !== 'EPIC' && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                      Estimate <span className="text-slate-400 font-normal">(e.g. 4h, 2d, 4)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={estimate}
+                      onChange={(e) => setEstimate(e.target.value)}
+                      placeholder="4h or 2d"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm text-slate-900 font-medium bg-white focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">Due Date</label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={dueDate}
+                        onChange={(e) => {
+                          let val = e.target.value.replace(/\D/g, '').slice(0, 8);
+                          if (val.length > 2) val = val.slice(0, 2) + '/' + val.slice(2);
+                          if (val.length > 5) val = val.slice(0, 5) + '/' + val.slice(5);
+                          setDueDate(val);
+                        }}
+                        placeholder="dd/mm/yyyy"
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm text-slate-900 font-medium bg-white focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20 placeholder:text-slate-300 pr-10"
+                        maxLength={10}
+                      />
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-blue-500 transition-colors">
+                        <svg 
+                          onClick={(e) => {
+                            const input = (e.currentTarget.parentElement?.previousElementSibling as HTMLInputElement);
+                            const picker = (e.currentTarget.parentElement?.querySelector('input[type="date"]') as HTMLInputElement);
+                            picker?.showPicker();
+                          }}
+                          width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                        >
+                          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+                        </svg>
+                        <input 
+                          type="date" 
+                          className="absolute inset-0 opacity-0 w-0 h-0 pointer-events-none" 
+                          onChange={(e) => {
+                            if (!e.target.value) return;
+                            const [y, m, d] = e.target.value.split('-');
+                            setDueDate(`${d}/${m}/${y}`);
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
 

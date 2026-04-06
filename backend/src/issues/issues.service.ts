@@ -21,6 +21,8 @@ const ISSUE_SELECT = {
   projectId: true,
   assigneeId: true,
   reporterId: true,
+  estimate: true,
+  dueDate: true,
   createdAt: true,
   updatedAt: true,
   assignee: { select: { id: true, name: true, email: true } },
@@ -196,8 +198,39 @@ export class IssuesService {
         projectId: project.id,
         assigneeId: dto.assigneeId ?? null,
         reporterId: dto.reporterId ?? null,
+        estimate: dto.estimate ? (isNaN(Number(dto.estimate)) ? dto.estimate : `${dto.estimate}h`) : null,
+        dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
       },
       select: ISSUE_SELECT,
+    });
+  }
+
+  /**
+   * GET /issues/search?q=<query>&projectId=<id>
+   * Multi-type search: matches issueKey OR title across all types.
+   * Results ordered by type priority (EPIC, STORY, TASK, BUG).
+   */
+  async search(q: string, projectId: string) {
+    const project = await this.prisma.project.findFirst({
+      where: { OR: [{ id: projectId }, { projectID: projectId }] },
+      select: { id: true },
+    });
+    if (!project) throw new NotFoundException(`Project not found: ${projectId}`);
+
+    // Also search projects by name/projectID if query might be a project reference
+    return this.prisma.issue.findMany({
+      where: {
+        projectId: project.id,
+        OR: [
+          { issueKey: { contains: q, mode: 'insensitive' } },
+          { title: { contains: q, mode: 'insensitive' } },
+        ],
+      },
+      select: ISSUE_SELECT,
+      orderBy: [
+        { type: 'asc' }, // EPIC < STORY < TASK < BUG (alphabetical = logical)
+        { issueKey: 'asc' },
+      ],
     });
   }
 
@@ -317,6 +350,8 @@ export class IssuesService {
         // Allow explicitly setting parentId to null (un-parent an issue)
         ...(dto.parentId !== undefined && { parentId: dto.parentId ?? null }),
         ...(dto.assigneeId !== undefined && { assigneeId: dto.assigneeId }),
+        ...(dto.estimate !== undefined && { estimate: dto.estimate ? (isNaN(Number(dto.estimate)) ? dto.estimate : `${dto.estimate}h`) : null }),
+        ...(dto.dueDate !== undefined && { dueDate: dto.dueDate ? new Date(dto.dueDate) : null }),
       },
       select: ISSUE_DETAIL_SELECT,
     });

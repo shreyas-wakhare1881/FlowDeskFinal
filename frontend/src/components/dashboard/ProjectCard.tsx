@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useRef } from 'react';
 import ProjectActionsMenu from './ProjectActionsMenu';
@@ -125,6 +125,8 @@ interface ProjectCardProps {
     rbacMembers?: RbacMember[];
     /** Live issue count from the issues table */
     issueCount?: number;
+    /** Current user's role in this project */
+    userRole?: string;
   };
   onClick?: () => void;
   onInfoAction?: () => void;
@@ -173,7 +175,11 @@ function ProjectCardInner({
   const [menuOpen, setMenuOpen] = useState(false);
   const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
   const menuBtnRef = useRef<HTMLDivElement>(null);
-  const showActions = canManage || isSuperAdmin;
+  
+  // RBAC: Show actions ONLY for Manager/SuperAdmin (global or per-project)
+  const role = project.userRole?.toLowerCase();
+  const isProjectManager = role === 'manager' || role === 'superadmin';
+  const showActions = isProjectManager || isSuperAdmin;
 
   const handleMenuToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -193,46 +199,51 @@ function ProjectCardInner({
       style={{ borderLeft: `4px solid ${pCfg.accent}`, position: 'relative' }}
     >
       {/* ── Actions ⋮ button — top-right, BEFORE info icon ─────────── */}
-      {showActions && (
+      <div
+        ref={menuBtnRef}
+        style={{ 
+          position: 'absolute', 
+          top: '12px', 
+          right: onInfoAction ? '48px' : '12px', 
+          zIndex: 20,
+          visibility: showActions ? 'visible' : 'hidden', // UI Safety: Prevent layout shift
+          pointerEvents: showActions ? 'auto' : 'none',
+        }}
+      >
         <div
-          ref={menuBtnRef}
-          style={{ position: 'absolute', top: '12px', right: onInfoAction ? '48px' : '12px', zIndex: 20 }}
+          onClick={handleMenuToggle}
+          title="More actions"
+          style={{
+            width: '28px', height: '28px', borderRadius: '50%',
+            background: menuOpen ? 'var(--pc-hover-bg, #f3f4f6)' : 'transparent',
+            border: '1.5px solid transparent',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', transition: 'all 0.18s ease',
+          }}
+          className="pc-actions-btn"
         >
-          <div
-            onClick={handleMenuToggle}
-            title="More actions"
-            style={{
-              width: '28px', height: '28px', borderRadius: '50%',
-              background: menuOpen ? 'var(--pc-hover-bg, #f3f4f6)' : 'transparent',
-              border: '1.5px solid transparent',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              cursor: 'pointer', transition: 'all 0.18s ease',
-            }}
-            className="pc-actions-btn"
-          >
-            {/* Three-dot SVG */}
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"
-              style={{ color: 'var(--pc-label-color, #6b7280)' }}>
-              <circle cx="12" cy="5"  r="1.5" />
-              <circle cx="12" cy="12" r="1.5" />
-              <circle cx="12" cy="19" r="1.5" />
-            </svg>
-          </div>
-
-          {/* Portal-rendered dropdown — lives outside pc-card, never clipped */}
-          <ProjectActionsMenu
-            isOpen={menuOpen}
-            anchorRect={anchorRect}
-            onClose={() => setMenuOpen(false)}
-            onAddPeople={onAddPeople ?? (() => {})}
-            onSettings={onSettings ?? (() => {})}
-            onArchive={onArchive ?? (() => {})}
-            onDelete={onDelete ?? (() => {})}
-            canManage={canManage ?? false}
-            isSuperAdmin={isSuperAdmin ?? false}
-          />
+          {/* Three-dot SVG */}
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"
+            style={{ color: 'var(--pc-label-color, #6b7280)' }}>
+            <circle cx="12" cy="5"  r="1.5" />
+            <circle cx="12" cy="12" r="1.5" />
+            <circle cx="12" cy="19" r="1.5" />
+          </svg>
         </div>
-      )}
+
+        {/* Portal-rendered dropdown — lives outside pc-card, never clipped */}
+        <ProjectActionsMenu
+          isOpen={menuOpen}
+          anchorRect={anchorRect}
+          onClose={() => setMenuOpen(false)}
+          onAddPeople={onAddPeople ?? (() => {})}
+          onSettings={onSettings ?? (() => {})}
+          onArchive={onArchive ?? (() => {})}
+          onDelete={onDelete ?? (() => {})}
+          canManage={!!(isProjectManager || canManage)}
+          isSuperAdmin={!!isSuperAdmin}
+        />
+      </div>
 
       {/* Info Icon - top-right corner */}
       {onInfoAction && (

@@ -98,7 +98,7 @@ const KanbanColumnIcon = ({ id }: { id: IssueStatus }) => {
 function HierarchicalChildItem({ issueId, allIssues, depth = 0, onOpen }: { issueId: string, allIssues: Issue[], depth?: number, onOpen: (id: string) => void }) {
   const issue = allIssues.find(i => i.id === issueId);
   const [expanded, setExpanded] = useState(false);
-  
+
   if (!issue) return null;
   const children = allIssues.filter(i => i.parentId === issue.id);
   const hasChildren = children.length > 0;
@@ -106,13 +106,13 @@ function HierarchicalChildItem({ issueId, allIssues, depth = 0, onOpen }: { issu
 
   return (
     <div className="flex flex-col mb-1.5 flex-shrink-0">
-      <div 
+      <div
         className="flex items-center gap-1.5 p-1 rounded hover:bg-slate-50 border border-transparent cursor-pointer transition-colors"
         style={{ paddingLeft: `${depth * 20}px` }}
         onClick={(e) => { e.stopPropagation(); onOpen(issue.id); }}
       >
         {hasChildren ? (
-          <button 
+          <button
             className="flex items-center justify-center text-slate-400 hover:bg-slate-200 hover:text-slate-600 rounded p-0.5 transition-colors flex-shrink-0"
             onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
           >
@@ -123,7 +123,7 @@ function HierarchicalChildItem({ issueId, allIssues, depth = 0, onOpen }: { issu
         ) : (
           <div className="w-[16px] flex-shrink-0" />
         )}
-        
+
         <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded flex-shrink-0 border ${cBadge.pill} border-current/10`}>
           <TypeIcon type={issue.type} size={10} />
           <span className="text-[10px] font-bold capitalize tracking-wide">{issue.type.toLowerCase()}</span>
@@ -131,7 +131,7 @@ function HierarchicalChildItem({ issueId, allIssues, depth = 0, onOpen }: { issu
         <span className="text-[11px] font-mono text-slate-400 flex-shrink-0">{issue.issueKey}</span>
         <span className="text-[12px] font-bold text-slate-800 flex-1 truncate">{issue.title}</span>
       </div>
-      
+
       {expanded && hasChildren && (
         <div className="flex flex-col mt-0.5">
           {children.map(child => (
@@ -172,13 +172,13 @@ function KanbanCard({ issue, allIssues, onOpen }: { issue: Issue; allIssues: Iss
             </p>
             <div className="text-slate-400 opacity-0 group-hover/card:opacity-100 hover:text-slate-700 transition-opacity mt-[3px] flex-shrink-0" title="Edit">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+                <path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
               </svg>
             </div>
           </div>
           <div className="relative">
-            <button 
-              className="text-[#6B778C] hover:bg-[#EBECF0] rounded translate-y-[-2px] tracking-widest px-0.5 opacity-0 group-hover/card:opacity-100 transition-opacity flex-shrink-0 font-bold" 
+            <button
+              className="text-[#6B778C] hover:bg-[#EBECF0] rounded translate-y-[-2px] tracking-widest px-0.5 opacity-0 group-hover/card:opacity-100 transition-opacity flex-shrink-0 font-bold"
               onClick={(e) => { e.stopPropagation(); setIsMenuOpen(!isMenuOpen); }}
             >
               •••
@@ -188,10 +188,10 @@ function KanbanCard({ issue, allIssues, onOpen }: { issue: Issue; allIssues: Iss
                 <div className="fixed inset-0 z-40 cursor-default" onClick={(e) => { e.stopPropagation(); setIsMenuOpen(false); }} />
                 <div className="absolute right-0 top-6 w-48 bg-white border border-[#DFE1E6] rounded-[3px] shadow-[0_4px_8px_rgba(9,30,66,0.15)] z-50 flex flex-col py-1.5 text-[14px] text-[#172B4D] font-normal" onClick={(e) => e.stopPropagation()}>
                   <button className="flex items-center justify-between px-4 py-1.5 hover:bg-[#EBECF0] w-full text-left transition-colors cursor-pointer">
-                    Move work item <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[#6B778C]"><polyline points="9 18 15 12 9 6"/></svg>
+                    Move work item <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[#6B778C]"><polyline points="9 18 15 12 9 6" /></svg>
                   </button>
                   <button className="flex items-center justify-between px-4 py-1.5 hover:bg-[#EBECF0] w-full text-left transition-colors cursor-pointer">
-                    Change status <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[#6B778C]"><polyline points="9 18 15 12 9 6"/></svg>
+                    Change status <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[#6B778C]"><polyline points="9 18 15 12 9 6" /></svg>
                   </button>
                   <div className="h-px bg-[#DFE1E6] my-1" />
                   <button className="px-4 py-1.5 hover:bg-[#EBECF0] w-full text-left transition-colors cursor-pointer">Copy link</button>
@@ -201,7 +201,7 @@ function KanbanCard({ issue, allIssues, onOpen }: { issue: Issue; allIssues: Iss
                   <button className="px-4 py-1.5 hover:bg-[#EBECF0] w-full text-left transition-colors cursor-pointer">Add label</button>
                   <button className="px-4 py-1.5 hover:bg-[#EBECF0] w-full text-left transition-colors cursor-pointer">Link work item</button>
                   <button className="flex items-center justify-between px-4 py-1.5 hover:bg-[#EBECF0] w-full text-left transition-colors cursor-pointer">
-                    Select cover <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[#6B778C]"><polyline points="9 18 15 12 9 6"/></svg>
+                    Select cover <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[#6B778C]"><polyline points="9 18 15 12 9 6" /></svg>
                   </button>
                   <div className="h-px bg-[#DFE1E6] my-1" />
                   <button className="px-4 py-1.5 hover:bg-[#EBECF0] w-full text-left transition-colors cursor-pointer">Archive</button>
@@ -231,18 +231,18 @@ function KanbanCard({ issue, allIssues, onOpen }: { issue: Issue; allIssues: Iss
 
           <div className="flex items-center gap-2">
             <div className="bg-[#DFE1E6] text-[#172B4D] text-[11px] font-bold px-1.5 rounded-[3px] min-w-[20px] h-[20px] flex items-center justify-center">
-               4
+              4
             </div>
-            
+
             <div className="flex items-center justify-center -mx-0.5">
               {issue.priority === 'HIGH' && (
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FF5630" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FF5630" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15" /></svg>
               )}
               {issue.priority === 'MEDIUM' && (
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFAB00" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="6" y1="9" x2="18" y2="9"/><line x1="6" y1="15" x2="18" y2="15"/></svg>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFAB00" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="6" y1="9" x2="18" y2="9" /><line x1="6" y1="15" x2="18" y2="15" /></svg>
               )}
               {issue.priority === 'LOW' && (
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0065FF" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0065FF" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
               )}
             </div>
 
@@ -308,6 +308,23 @@ function IssueKanbanBoard({ issues, onOpenIssue, onAddIssue, onDropIssue }: { is
   ];
   const kanbanIssues = issues.filter(i => i.type !== 'EPIC');
 
+  if (kanbanIssues.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center bg-white rounded-2xl border border-slate-200 w-full h-[400px]">
+        <svg className="w-16 h-16 text-slate-200 mb-4" fill="none" stroke="currentColor" strokeWidth={1} viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+        </svg>
+        <h3 className="text-lg font-bold text-slate-800 mb-2">No tasks yet</h3>
+        <p className="text-slate-500 text-sm mb-6">Your board is empty. Get started by creating a new task.</p>
+        <button
+          onClick={onAddIssue}
+          className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl text-sm font-semibold transition-colors shadow-sm"
+        >
+          Create Task
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex gap-6 overflow-x-auto h-full pb-4 items-start w-full min-w-0">
@@ -368,18 +385,20 @@ function IssueKanbanBoard({ issues, onOpenIssue, onAddIssue, onDropIssue }: { is
                 );
               })}
 
-              {/* Inline Add Issue logic */}
-              <button
-                onClick={onAddIssue}
-                className="group flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-lg p-3 hover:border-blue-400 hover:bg-blue-50 transition-all mt-1 bg-white cursor-pointer"
-              >
-                <div className="flex items-center justify-center w-8 h-8 rounded-full bg-slate-100 group-hover:bg-blue-100 transition-colors">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-slate-500 group-hover:text-blue-600">
-                    <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-                  </svg>
-                </div>
-                <span className="text-[12px] font-bold text-slate-500 mt-2 group-hover:text-blue-700 transition-colors">Create issue</span>
-              </button>
+              {/* Inline Add Issue logic — only visible in To Do column */}
+              {col.id === 'TODO' && (
+                <button
+                  onClick={onAddIssue}
+                  className="group flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-lg p-3 hover:border-blue-400 hover:bg-blue-50 transition-all mt-1 bg-white cursor-pointer"
+                >
+                  <div className="flex items-center justify-center w-8 h-8 rounded-full bg-slate-100 group-hover:bg-blue-100 transition-colors">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-slate-500 group-hover:text-blue-600">
+                      <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                  </div>
+                  <span className="text-[12px] font-bold text-slate-500 mt-2 group-hover:text-blue-700 transition-colors">Create issue</span>
+                </button>
+              )}
             </div>
           </div>
         );
@@ -447,8 +466,8 @@ function IssueTableView({ issues, onOpenIssue }: { issues: Issue[]; onOpenIssue:
                 </td>
                 <td className="px-5 py-3.5">
                   <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${issue.status === 'TODO' ? 'bg-slate-100 text-slate-600' :
-                      issue.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' :
-                        'bg-green-100 text-green-700'
+                    issue.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' :
+                      'bg-green-100 text-green-700'
                     }`}>
                     {STATUS_MAP[issue.status].label}
                   </span>
@@ -571,15 +590,14 @@ function IssueProgressView({ issues, members, onOpenIssue }: { issues: Issue[]; 
                     />
                   </div>
                 </div>
-                <span className={`text-xs font-bold w-10 text-right flex-shrink-0 ${
-                  member.pct === 100 ? 'text-emerald-600' : member.pct > 50 ? 'text-blue-600' : 'text-slate-500'
-                }`}>{member.pct}%</span>
+                <span className={`text-xs font-bold w-10 text-right flex-shrink-0 ${member.pct === 100 ? 'text-emerald-600' : member.pct > 50 ? 'text-blue-600' : 'text-slate-500'
+                  }`}>{member.pct}%</span>
               </div>
             ))}
             {unassignedIssues.length > 0 && (
               <div className="flex items-center gap-4">
                 <div className="w-8 h-8 rounded-full border-2 border-dashed border-slate-300 flex items-center justify-center text-slate-400 flex-shrink-0">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex justify-between items-center mb-1.5">
@@ -618,6 +636,7 @@ export default function WsViewPage() {
   const [isTeamVisibilityOpen, setIsTeamVisibilityOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [showAddPeople, setShowAddPeople] = useState(false);
+  const [projectRole, setProjectRole] = useState<string | null>(null);
 
   // Read ?tab= from URL, default to 'kanban'
   const tabParam = searchParams.get('tab') as ViewMode | null;
@@ -627,6 +646,7 @@ export default function WsViewPage() {
   useEffect(() => {
     if (!projectId) return;
     projectsService.getByProjectID(projectId).then(setProject).catch(console.error);
+    projectsService.getPermissions(projectId).then(p => setProjectRole(p.role)).catch(console.error);
     projectsService.getMembers(projectId).then((data) => {
       setMembers(data as Member[]);
     }).catch(console.error);
@@ -761,7 +781,7 @@ export default function WsViewPage() {
 
         {/* ── PROJECT HERO HEADER ───────────────────────────────────────── */}
         <div className="bg-white px-6 pt-2 pb-1">
-            {/* Remove Spaces label - show only project name */}
+          {/* Remove Spaces label - show only project name */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-md bg-[#0052CC] flex items-center justify-center text-white flex-shrink-0 shadow-sm">
@@ -781,60 +801,64 @@ export default function WsViewPage() {
                     <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
                   </svg>
                 </button>
-                <div className="relative">
-                  <button
-                    onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)}
-                    className="flex items-center justify-center p-1 rounded hover:bg-slate-100 transition-colors text-slate-500 font-bold tracking-widest px-2"
-                    title="More options"
-                  >
-                    ...
-                  </button>
-                  {isMoreMenuOpen && (
-                    <>
-                      <div className="fixed inset-0 z-40" onClick={() => setIsMoreMenuOpen(false)}></div>
-                      <div className="absolute top-10 left-0 w-52 bg-white border border-slate-200 rounded-lg shadow-xl py-1.5 z-50 text-sm" style={{ animation: 'modalScaleIn 0.15s ease-out' }}>
-                        <button
-                          className="flex items-center gap-2.5 w-full text-left px-4 py-2 text-blue-700 hover:bg-blue-50 font-medium"
-                          onClick={() => { setIsMoreMenuOpen(false); setShowAddPeople(true); }}
-                        >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
-                            <line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/>
-                          </svg>
-                          Add People
-                        </button>
-                        <button className="flex items-center gap-2.5 w-full text-left px-4 py-2 text-slate-700 hover:bg-slate-50">
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-                          </svg>
-                          Project Settings
-                        </button>
-                        <hr className="my-1 border-slate-100" />
-                        <button className="flex items-center gap-2.5 w-full text-left px-4 py-2 text-red-600 hover:bg-red-50">
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
-                          </svg>
-                          Move to Trash
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
+                {(projectRole?.toLowerCase() === 'manager' || projectRole?.toLowerCase() === 'superadmin') && (
+                  <div className="relative">
+                    <button
+                      onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)}
+                      className="flex items-center justify-center p-1 rounded hover:bg-slate-100 transition-colors text-slate-500 font-bold tracking-widest px-2"
+                      title="More options"
+                    >
+                      ...
+                    </button>
+                    {isMoreMenuOpen && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setIsMoreMenuOpen(false)}></div>
+                        <div className="absolute top-10 left-0 w-52 bg-white border border-slate-200 rounded-lg shadow-xl py-1.5 z-50 text-sm" style={{ animation: 'modalScaleIn 0.15s ease-out' }}>
+                          <button
+                            className="flex items-center gap-2.5 w-full text-left px-4 py-2 text-blue-700 hover:bg-blue-50 font-medium"
+                            onClick={() => { setIsMoreMenuOpen(false); setShowAddPeople(true); }}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" />
+                              <line x1="19" y1="8" x2="19" y2="14" /><line x1="22" y1="11" x2="16" y2="11" />
+                            </svg>
+                            Add People
+                          </button>
+                          <button className="flex items-center gap-2.5 w-full text-left px-4 py-2 text-slate-700 hover:bg-slate-50">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                            </svg>
+                            Project Settings
+                          </button>
+                          <hr className="my-1 border-slate-100" />
+                          <button className="flex items-center gap-2.5 w-full text-left px-4 py-2 text-red-600 hover:bg-red-50">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                            </svg>
+                            Move to Trash
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* Create Issue Button — replaces old Share/Insights/Feedback/Maximize icons */}
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => openCreateIssue('TASK')}
-                className="flex items-center gap-2 px-4 py-[7px] bg-[#0052CC] hover:bg-[#0047B3] text-white text-[13.5px] font-bold rounded-[3px] transition-colors shadow-sm"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-                Create Issue
-              </button>
-            </div>
+            {/* Create Issue Button — restricted role */}
+            {(projectRole?.toLowerCase() === 'manager' || projectRole?.toLowerCase() === 'superadmin') && (
+              <div className="flex items-center gap-2 translate-y-[15px]">
+                <button
+                  onClick={() => openCreateIssue('TASK')}
+                  className="flex items-center gap-2 px-4 py-[7px] bg-[#0052CC] hover:bg-[#0047B3] text-white text-[13.5px] font-bold rounded-[3px] transition-colors shadow-sm"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                  Create Issue
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -919,8 +943,8 @@ export default function WsViewPage() {
             {/* Filter Button */}
             <button
               className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-md text-sm font-semibold shadow-sm transition-colors ${selectedAssignees.length > 0
-                  ? 'border-blue-500 bg-blue-50 text-blue-700 hover:bg-blue-100'
-                  : 'border-slate-300 text-slate-700 bg-slate-50 hover:bg-slate-100'
+                ? 'border-blue-500 bg-blue-50 text-blue-700 hover:bg-blue-100'
+                : 'border-slate-300 text-slate-700 bg-slate-50 hover:bg-slate-100'
                 }`}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={selectedAssignees.length > 0 ? "text-blue-600" : "text-slate-500"}>

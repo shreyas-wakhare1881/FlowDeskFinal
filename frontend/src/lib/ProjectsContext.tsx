@@ -40,6 +40,8 @@ export interface MockProject {
   rbacMembers?: { userId: string; name: string; email: string; roleName: string }[];
   /** Issue count from the issues table */
   issueCount?: number;
+  /** Current user's role in this project (RBAC) */
+  userRole?: string;
 }
 
 // ── Helper: format ISO date to "Mar 10, 2026" ────────────────────────────────
@@ -89,6 +91,8 @@ function mapApiToMock(p: ApiProject & {
     })) ?? [],
     // Issue count from _count
     issueCount: (p as any)._count?.issues ?? 0,
+    // Per-project role injected by the backend findMyProjects mapper
+    userRole: (p as any).userRole,
   };
 }
 

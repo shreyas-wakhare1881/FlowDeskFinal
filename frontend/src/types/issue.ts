@@ -36,6 +36,8 @@ export interface Issue {
   reporter: IssueUser | null;
   createdAt: string;
   updatedAt: string;
+  estimate: string | null;
+  dueDate: string | null;
 }
 
 // ── Issue link ────────────────────────────────────────────────────────────────
@@ -95,6 +97,8 @@ export interface CreateIssuePayload {
   parentId?: string;
   assigneeId?: string;
   reporterId?: string;
+  estimate?: string;
+  dueDate?: string;
 }
 
 export interface UpdateIssuePayload {
@@ -106,6 +110,8 @@ export interface UpdateIssuePayload {
   type?: IssueType;
   parentId?: string | null;
   assigneeId?: string | null;
+  estimate?: string | null;
+  dueDate?: string | null;
 }
 
 export interface CreateIssueLinkPayload {

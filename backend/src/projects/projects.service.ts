@@ -286,11 +286,25 @@ export class ProjectsService {
     const allIds = [...new Set([...roleProjectIds, ...createdProjectIds])];
     if (allIds.length === 0) return { data: [], meta: { total: 0 } };
 
-    const data = await this.prisma.project.findMany({
+    const projectsRaw = await this.prisma.project.findMany({
       where: { id: { in: allIds } },
       include: FULL_INCLUDE,
       orderBy: { createdAt: 'desc' },
     });
+
+    // Map projects to include the specific role of the requesting user
+    const data = await Promise.all(
+      projectsRaw.map(async (project) => {
+        const userRole = await this.prisma.userRole.findFirst({
+          where: { userId, projectId: project.id },
+          include: { role: true },
+        });
+        return {
+          ...project,
+          userRole: userRole?.role?.name || 'DEVELOPER', // fallback to DEVELOPER if unknown
+        };
+      }),
+    );
 
     return { data, meta: { total: data.length } };
   }
@@ -325,18 +339,17 @@ export class ProjectsService {
       return { projectId, role: null, permissions: [] };
     }
 
-    // SuperAdmin bypass — mirrors PermissionGuard backend logic.
-    // SuperAdmin's DB role_permissions only list MANAGE_* entries, but they
+    // SuperAdmin and Manager bypass — mirrors PermissionGuard backend logic.
+    // SuperAdmin/Manager's DB role_permissions only list MANAGE_* entries, but they
     // bypass ALL permission checks on the backend. Return every permission so
-    // the frontend doesn't incorrectly block access on granular checks like
-    // permissions.includes('CREATE_TASK').
-    if (userRole.role.name === 'SuperAdmin') {
+    // the frontend doesn't incorrectly block access on granular checks.
+    if (userRole.role.name === 'SuperAdmin' || userRole.role.name === 'Manager') {
       const allPermissions = await this.prisma.permission.findMany({
         select: { name: true },
       });
       return {
         projectId,
-        role: 'SuperAdmin',
+        role: userRole.role.name,
         permissions: allPermissions.map((p) => p.name),
       };
     }

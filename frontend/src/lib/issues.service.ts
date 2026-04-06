@@ -35,6 +35,10 @@ export const issuesService = {
   getTree: (projectId: string): Promise<IssueTree[]> =>
     api.get<IssueTree[]>(`/issues/tree?projectId=${encodeURIComponent(projectId)}`),
 
+  /** Unified search across all issue types — matches issueKey or title */
+  search: (projectId: string, q: string): Promise<Issue[]> =>
+    api.get<Issue[]>(`/issues/search?q=${encodeURIComponent(q)}&projectId=${encodeURIComponent(projectId)}`),
+
   /** Get a single issue with full detail (parent, children, sourceLinks, targetLinks) */
   getOne: (id: string, projectId: string): Promise<IssueDetail> =>
     api.get<IssueDetail>(`/issues/${id}?projectId=${encodeURIComponent(projectId)}`),

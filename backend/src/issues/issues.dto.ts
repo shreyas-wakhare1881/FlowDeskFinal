@@ -3,7 +3,9 @@ import {
   IsOptional,
   IsEnum,
   IsUUID,
+  IsDateString,
 } from 'class-validator';
+
 import { IssueType, IssueStatus, IssuePriority } from '@prisma/client';
 
 export class CreateIssueDto {
@@ -43,6 +45,14 @@ export class CreateIssueDto {
   @IsOptional()
   @IsUUID()
   reporterId?: string;
+
+  @IsOptional()
+  @IsString()
+  estimate?: string;
+
+  @IsOptional()
+  @IsDateString()
+  dueDate?: string | null;
 }
 
 export class UpdateIssueDto {
@@ -82,4 +92,12 @@ export class UpdateIssueDto {
   @IsOptional()
   @IsUUID()
   assigneeId?: string | null;
+
+  @IsOptional()
+  @IsString()
+  estimate?: string | null;
+
+  @IsOptional()
+  @IsDateString()
+  dueDate?: string | null;
 }

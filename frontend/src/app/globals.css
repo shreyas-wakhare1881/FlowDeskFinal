@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
 /* ── Base font size: 14px gives ~87.5% compact scale (no zoom/scale needed) */
 html {

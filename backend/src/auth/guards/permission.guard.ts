@@ -79,8 +79,8 @@ export class PermissionGuard implements CanActivate {
       throw new ForbiddenException('You are not a member of this project');
     }
 
-    // ── 5. SuperAdmin bypass — always allow ───────────────────────────────────
-    if (userRole.role.name === 'SuperAdmin') {
+    // ── 5. SuperAdmin / Manager bypass — always allow ───────────────────────────────────
+    if (userRole.role.name === 'SuperAdmin' || userRole.role.name === 'Manager') {
       return true;
     }
 

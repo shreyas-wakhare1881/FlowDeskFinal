@@ -402,6 +402,10 @@ model Issue {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
+  // Time tracking & Scheduling (Phase 2 additions)
+  estimate    String?       // e.g. "4h", "2d", "4"
+  dueDate     DateTime?
+
   @@index([projectId])
   @@index([parentId])
   @@index([assigneeId])   // speeds up Team Progress aggregation

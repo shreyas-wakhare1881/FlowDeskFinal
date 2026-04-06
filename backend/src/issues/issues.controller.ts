@@ -41,6 +41,19 @@ export class IssuesController {
     return this.issuesService.getKanban(projectId);
   }
 
+  // GET /api/issues/search?q=<query>&projectId=<id>
+  // Unified search: matches query against issueKey OR title (all types)
+  // Returns flat results with hierarchy info for accordion UI.
+  @Get('search')
+  @UseGuards(PermissionGuard)
+  @RequirePermission('READ_ISSUE')
+  search(
+    @Query('q') q: string,
+    @Query('projectId') projectId: string,
+  ) {
+    return this.issuesService.search(q, projectId);
+  }
+
   // ── Standard CRUD ────────────────────────────────────────────────────────
 
   // POST /api/issues

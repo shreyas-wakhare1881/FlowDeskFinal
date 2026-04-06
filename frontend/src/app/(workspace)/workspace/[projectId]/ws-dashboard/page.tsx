@@ -5,11 +5,10 @@ import { useParams, useRouter } from 'next/navigation';
 import WsSidebar from '@/components/workspace/WsSidebar';
 import WsTopbar from '@/components/workspace/WsTopbar';
 import StatsCard from '@/components/dashboard/StatsCard';
-import { tasksService } from '@/lib/tasks.service';
 import { projectsService } from '@/lib/projects.service';
 import { useCurrentUser } from '@/lib/hooks/useCurrentUser';
 import { useIssues } from '@/lib/IssuesContext';
-import type { Task } from '@/types/task';
+import { useIssueModal } from '@/lib/IssueModalContext';
 import type { Issue } from '@/types/issue';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -154,89 +153,7 @@ const ISSUE_STATUS_CONFIG = {
   DONE:        { label: 'Done',        dot: '#16a34a' },
 } as const;
 
-// ── Task Card ──────────────────────────────────────────────────────────────────
-function TaskCard({ task, onClick }: { task: Task; onClick: () => void }) {
-  const firstAssignee = task.assignees?.[0];
 
-  return (
-    <div
-      onClick={onClick}
-      className="bg-white rounded-2xl p-5 border border-slate-100 hover:border-blue-200 hover:shadow-lg hover:shadow-blue-500/5 transition-all cursor-pointer group"
-    >
-      {/* Header */}
-      <div className="flex items-start justify-between mb-3">
-        <span className="text-xs font-mono text-slate-400">{task.taskID}</span>
-        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full flex items-center gap-1 ${priorityBadge[task.priority]}`}>
-          <PriorityDot priority={task.priority} />
-          {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
-        </span>
-      </div>
-
-      {/* Task name */}
-      <h3 className="text-sm font-semibold text-slate-900 mb-3 line-clamp-2 group-hover:text-blue-700 transition-colors">
-        {task.taskName}
-      </h3>
-
-      {/* Description */}
-      {task.taskDescription && (
-        <p className="text-xs text-slate-500 mb-3 line-clamp-2">{task.taskDescription}</p>
-      )}
-
-      {/* Progress Bar */}
-      <div className="mb-4">
-        <div className="flex justify-between text-xs text-slate-500 mb-1">
-          <span>Progress</span>
-          <span className="font-semibold">{task.progress ?? 0}%</span>
-        </div>
-        <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-          <div
-            className={`h-full rounded-full transition-all ${
-              task.status === 'completed' ? 'bg-emerald-500' :
-              task.status === 'overdue'   ? 'bg-red-500'     : 'bg-blue-500'
-            }`}
-            style={{ width: `${task.progress ?? 0}%` }}
-          />
-        </div>
-      </div>
-
-      {/* Footer */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          {firstAssignee ? (
-            <>
-              <div
-                className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
-                style={{ backgroundColor: firstAssignee.avatarColor || '#4361ee' }}
-              >
-                {firstAssignee.avatar || firstAssignee.name?.slice(0, 2).toUpperCase()}
-              </div>
-              <span className="text-xs text-slate-600 font-medium">{firstAssignee.name}</span>
-              {task.assignees.length > 1 && (
-                <span className="text-xs text-slate-400">+{task.assignees.length - 1}</span>
-              )}
-            </>
-          ) : (
-            <span className="text-xs text-slate-400">Unassigned</span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${statusColors[task.status]}`}>
-            {statusLabels[task.status]}
-          </span>
-          <span className="text-[10px] text-slate-400">{fmtDate(task.dueDate)}</span>
-        </div>
-      </div>
-
-      {/* Recurring badge — SVG, no emoji */}
-      {task.isRecurring && (
-        <div className="mt-2 flex items-center gap-1 text-[10px] text-purple-600 font-semibold">
-          <IconRecurring />
-          {task.recurringFrequency || 'Recurring'}
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ── Issue Card (Image-2 style) ────────────────────────────────────────────────
 function IssueCard({ issue }: { issue: Issue }) {
@@ -351,15 +268,16 @@ export default function WsDashboardPage() {
   const projectId   = params.projectId as string;
   const currentUser = useCurrentUser();
 
-  // Tasks — local state (not in global context)
-  const [tasks,       setTasks]       = useState<Task[]>([]);
   const [projectName, setProjectName] = useState<string>('');
   const [loading,     setLoading]     = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [showAll,     setShowAll]     = useState(false);
   const [filter,      setFilter]      = useState<'all' | 'todo' | 'in-progress' | 'completed' | 'overdue'>('all');
   const [showFilter,  setShowFilter]  = useState(false);
+  const [projectRole, setProjectRole] = useState<string | null>(null);
   const filterRef = useRef<HTMLDivElement>(null);
+
+  const { openCreateIssue: onAddIssue } = useIssueModal();
 
   // Issues — from IssuesContext (live, reactive to CRUD actions)
   const { allIssues, loading: issuesLoading } = useIssues();
@@ -370,16 +288,16 @@ export default function WsDashboardPage() {
     return allIssues.filter(i => i.assigneeId === currentUser.id);
   }, [allIssues, currentUser.id]);
 
-  // ── Fetch project name + tasks ────────────────────────────────────────────
+  // ── Fetch project name ────────────────────────────────────────────
   useEffect(() => {
     async function load() {
       try {
-        const [proj, taskList] = await Promise.all([
+        const [proj, perms] = await Promise.all([
           projectsService.getByProjectID(projectId).catch(() => null),
-          tasksService.getAll(projectId).catch(() => []),
+          projectsService.getPermissions(projectId).catch(() => null),
         ]);
         if (proj) setProjectName(proj.projectName);
-        setTasks(taskList);
+        if (perms) setProjectRole(perms.role);
       } finally {
         setLoading(false);
       }
@@ -400,39 +318,38 @@ export default function WsDashboardPage() {
 
   // ── Stats ─────────────────────────────────────────────────────────────────
   const stats = useMemo(() => ({
-    total:      tasks.length,
-    inProgress: tasks.filter(t => t.status === 'in-progress').length,
-    completed:  tasks.filter(t => t.status === 'completed').length,
-    overdue:    tasks.filter(t => t.status === 'overdue').length,
-  }), [tasks]);
+    total:      allIssues.length,
+    inProgress: allIssues.filter(i => i.status === 'IN_PROGRESS').length,
+    completed:  allIssues.filter(i => i.status === 'DONE').length,
+    overdue:    0, // Overdue concept needs to be aligned with issues dueDate in future
+  }), [allIssues]);
 
   // ── Filter + Search ───────────────────────────────────────────────────────
   const filtered = useMemo(() => {
-    return tasks.filter(t => {
+    return myIssues.filter(t => {
       const matchFilter =
         filter === 'all'         ? true :
-        filter === 'todo'        ? t.status === 'todo' :
-        filter === 'in-progress' ? t.status === 'in-progress' :
-        filter === 'completed'   ? t.status === 'completed' :
-                                   t.status === 'overdue';
+        filter === 'todo'        ? t.status === 'TODO' :
+        filter === 'in-progress' ? t.status === 'IN_PROGRESS' :
+        filter === 'completed'   ? t.status === 'DONE' : false;
       const q = searchQuery.toLowerCase();
       const matchSearch = !q ||
-        t.taskName.toLowerCase().includes(q) ||
-        t.assignees?.some(a => a.name.toLowerCase().includes(q));
+        t.title.toLowerCase().includes(q) ||
+        (t.assignee?.name.toLowerCase().includes(q) ?? false);
       return matchFilter && matchSearch;
     });
-  }, [tasks, filter, searchQuery]);
+  }, [myIssues, filter, searchQuery]);
 
   const SHOW_COUNT    = 6;
   const visibleTasks  = showAll ? filtered : filtered.slice(0, SHOW_COUNT);
 
   // Filter counts
   const filterCounts = {
-    all:           tasks.length,
-    todo:          tasks.filter(t => t.status === 'todo').length,
-    'in-progress': stats.inProgress,
-    completed:     stats.completed,
-    overdue:       stats.overdue,
+    all:           myIssues.length,
+    todo:          myIssues.filter(t => t.status === 'TODO').length,
+    'in-progress': myIssues.filter(t => t.status === 'IN_PROGRESS').length,
+    completed:     myIssues.filter(t => t.status === 'DONE').length,
+    overdue:       0,
   };
 
   // Active filter label
@@ -483,7 +400,7 @@ export default function WsDashboardPage() {
               <div className="flex items-center gap-3">
                 <h3 className="text-[1.25rem] font-semibold text-[#1a1a2e] tracking-tight">My Tasks</h3>
                 <span className="px-2.5 py-0.5 bg-[#eff3ff] text-[#4361ee] rounded-full text-[0.75rem] font-bold leading-none">
-                  {filtered.length + myIssues.length}
+                  {myIssues.length}
                 </span>
               </div>
 
@@ -557,7 +474,7 @@ export default function WsDashboardPage() {
                   </div>
                 ))}
               </div>
-            ) : filtered.length === 0 && myIssues.length === 0 ? (
+            ) : filtered.length === 0 ? (
               /* ── Nothing at all ── */
               <div className="flex flex-col items-center justify-center py-20 text-center bg-white rounded-2xl border border-slate-100">
                 <div className="mb-4 text-slate-300">
@@ -569,9 +486,9 @@ export default function WsDashboardPage() {
                 <p className="text-slate-500 text-sm mb-5">
                   {searchQuery ? 'Try a different search term.' : 'Create the first task for this project.'}
                 </p>
-                {!searchQuery && (
+                {!searchQuery && (projectRole?.toLowerCase() === 'manager' || projectRole?.toLowerCase() === 'superadmin') && (
                   <button
-                    onClick={() => router.push(`/workspace/${projectId}/ws-create-task`)}
+                    onClick={() => onAddIssue()}
                     className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold transition-colors"
                   >
                     + Create Task
@@ -581,16 +498,12 @@ export default function WsDashboardPage() {
             ) : (
               /* ── Has tasks OR issues (or both) ── */
               <>
-                {/* Task cards — only render when there are tasks */}
+                {/* Issue cards — rendered directly in My Tasks, no separate section */}
                 {filtered.length > 0 && (
                   <>
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                      {visibleTasks.map(task => (
-                        <TaskCard
-                          key={task.id}
-                          task={task}
-                          onClick={() => router.push(`/workspace/${projectId}/ws-view`)}
-                        />
+                      {visibleTasks.map(issue => (
+                        <IssueCard key={issue.id} issue={issue} />
                       ))}
                     </div>
                     {filtered.length > SHOW_COUNT && (
@@ -603,34 +516,6 @@ export default function WsDashboardPage() {
                         </button>
                       </div>
                     )}
-                  </>
-                )}
-
-                {/* Issue cards — rendered directly in My Tasks, no separate section */}
-                {myIssues.length > 0 && (
-                  <>
-                    {/* Divider only when BOTH tasks and issues are present */}
-                    {filtered.length > 0 && (
-                      <div className="flex items-center gap-3 mt-6 mb-4">
-                        <div className="h-px flex-1 bg-slate-200" />
-                        <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 uppercase tracking-widest select-none">
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
-                            <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
-                          </svg>
-                          Issues
-                          <span className="ml-0.5 px-1.5 py-0.5 bg-[#eff3ff] text-[#4361ee] rounded-full text-[10px] font-bold normal-case tracking-normal">
-                            {myIssues.length}
-                          </span>
-                        </span>
-                        <div className="h-px flex-1 bg-slate-200" />
-                      </div>
-                    )}
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                      {myIssues.map(issue => (
-                        <IssueCard key={issue.id} issue={issue} />
-                      ))}
-                    </div>
                   </>
                 )}
               </>
