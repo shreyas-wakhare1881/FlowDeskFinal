@@ -144,7 +144,7 @@ function HierarchicalChildItem({ issueId, allIssues, depth = 0, onOpen }: { issu
 }
 
 // Single Kanban card — clicking opens Issue Detail Modal
-function KanbanCard({ issue, allIssues, onOpen }: { issue: Issue; allIssues: Issue[]; onOpen: (id: string) => void }) {
+function KanbanCard({ issue, allIssues, onOpen, onDelete }: { issue: Issue; allIssues: Issue[]; onOpen: (id: string) => void; onDelete: (id: string) => void }) {
   const { isExpanded, toggleItem } = useAccordion();
   const tb = TYPE_BADGE[issue.type] ?? TYPE_BADGE.TASK;
   const expanded = isExpanded(issue.id);
@@ -205,20 +205,31 @@ function KanbanCard({ issue, allIssues, onOpen }: { issue: Issue; allIssues: Iss
                   </button>
                   <div className="h-px bg-[#DFE1E6] my-1" />
                   <button className="px-4 py-1.5 hover:bg-[#EBECF0] w-full text-left transition-colors cursor-pointer">Archive</button>
-                  <button className="px-4 py-1.5 hover:bg-[#EBECF0] w-full text-left transition-colors cursor-pointer">Delete</button>
+                  <button
+                    className="px-4 py-1.5 hover:bg-red-50 text-red-600 w-full text-left transition-colors cursor-pointer"
+                    onClick={(e) => { e.stopPropagation(); setIsMenuOpen(false); onDelete(issue.id); }}
+                  >Delete</button>
                 </div>
               </>
             )}
           </div>
         </div>
 
-        {/* Date line (Mocked visually based on createdAt to match reference image) */}
-        <div className="flex items-center gap-1.5 px-1.5 py-[3px] border border-[#DFE1E6] rounded-[3px] text-[#42526E] text-[12px] font-medium w-max shadow-sm mt-0.5 bg-white">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
-          </svg>
-          <span>{new Date(issue.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-        </div>
+        {/* Due date (falls back to createdAt) — red text when overdue */}
+        {(() => {
+          const dateStr = issue.dueDate ?? issue.createdAt;
+          const isOverdueDue = issue.dueDate && issue.status !== 'DONE' && new Date(issue.dueDate) < new Date();
+          return (
+            <div className={`flex items-center gap-1.5 px-1.5 py-[3px] border rounded-[3px] text-[12px] font-medium w-max shadow-sm mt-0.5 bg-white ${
+              isOverdueDue ? 'border-red-300 text-red-600' : 'border-[#DFE1E6] text-[#42526E]'
+            }`}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
+              </svg>
+              <span title={issue.dueDate ? 'Due date' : 'Created'}>{new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+            </div>
+          );
+        })()}
 
         {/* ROW 3: Type icon, Key, priority, assignee */}
         <div className="flex items-center justify-between mt-0.5 pt-0.5">
@@ -230,9 +241,11 @@ function KanbanCard({ issue, allIssues, onOpen }: { issue: Issue; allIssues: Iss
           </div>
 
           <div className="flex items-center gap-2">
-            <div className="bg-[#DFE1E6] text-[#172B4D] text-[11px] font-bold px-1.5 rounded-[3px] min-w-[20px] h-[20px] flex items-center justify-center">
-              4
-            </div>
+            {issue.estimate && (
+              <div className="bg-[#DFE1E6] text-[#172B4D] text-[11px] font-bold px-1.5 rounded-[3px] min-w-[20px] h-[20px] flex items-center justify-center" title="Estimate">
+                {issue.estimate}
+              </div>
+            )}
 
             <div className="flex items-center justify-center -mx-0.5">
               {issue.priority === 'HIGH' && (
@@ -299,7 +312,7 @@ function KanbanCard({ issue, allIssues, onOpen }: { issue: Issue; allIssues: Iss
 }
 
 
-function IssueKanbanBoard({ issues, onOpenIssue, onAddIssue, onDropIssue }: { issues: Issue[]; onOpenIssue: (id: string) => void; onAddIssue: () => void; onDropIssue: (id: string, status: IssueStatus) => void }) {
+function IssueKanbanBoard({ issues, onOpenIssue, onAddIssue, onDropIssue, onDeleteIssue }: { issues: Issue[]; onOpenIssue: (id: string) => void; onAddIssue: () => void; onDropIssue: (id: string, status: IssueStatus) => void; onDeleteIssue: (id: string) => void }) {
   // Filter out EPICs from Kanban board — Kanban shows only Task, Bug, Story
   const kanbanColumns: { id: IssueStatus; label: string; color: string }[] = [
     { id: 'TODO', label: 'To Do', color: 'border-slate-300 bg-slate-50' },
@@ -381,6 +394,7 @@ function IssueKanbanBoard({ issues, onOpenIssue, onAddIssue, onDropIssue }: { is
                     issue={issue}
                     allIssues={issues}
                     onOpen={onOpenIssue}
+                    onDelete={onDeleteIssue}
                   />
                 );
               })}
@@ -633,6 +647,11 @@ export default function WsViewPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
 
+  // Optimistic status overrides for drag-drop — reverted on API failure
+  const [statusOverrides, setStatusOverrides] = useState<Record<string, IssueStatus>>({});
+  // Inline error toast (auto-dismisses after 4s)
+  const [dropError, setDropError] = useState<string | null>(null);
+
   const [isTeamVisibilityOpen, setIsTeamVisibilityOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [showAddPeople, setShowAddPeople] = useState(false);
@@ -671,11 +690,35 @@ export default function WsViewPage() {
   };
 
   const handleDropIssue = async (issueId: string, newStatus: IssueStatus) => {
+    const prevStatus = (allIssues.find(i => i.id === issueId)?.status) ?? newStatus;
+    // Optimistic update — move card immediately in the UI
+    setStatusOverrides(prev => ({ ...prev, [issueId]: newStatus }));
     try {
       await issuesService.update(issueId, { status: newStatus, projectId });
+      // On success, clear override and let context reflect real state
+      setStatusOverrides(prev => { const n = { ...prev }; delete n[issueId]; return n; });
       refresh();
     } catch (err) {
+      // Rollback to previous status
+      setStatusOverrides(prev => ({ ...prev, [issueId]: prevStatus }));
+      setDropError('Failed to move issue. Please try again.');
+      setTimeout(() => setDropError(null), 4000);
       console.error('Failed to update issue status on drop:', err);
+    }
+  };
+
+  const handleDeleteIssue = async (issueId: string) => {
+    const issue = allIssues.find(i => i.id === issueId);
+    if (!issue) return;
+    const confirmed = window.confirm(`Delete "${issue.title}"? This cannot be undone. Children must be removed first.`);
+    if (!confirmed) return;
+    try {
+      await issuesService.delete(issueId, projectId);
+      refresh();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to delete issue';
+      setDropError(msg.includes('child') ? 'Delete or reassign children before deleting this issue.' : msg);
+      setTimeout(() => setDropError(null), 5000);
     }
   };
 
@@ -687,7 +730,11 @@ export default function WsViewPage() {
 
   // Use allIssues for Kanban/Table/Progress (includes orphans fully)
   // flatIssues = tree-derived; allIssues = flat from /api/issues endpoint
-  let displayIssues = allIssues.length > 0 ? allIssues : flatIssues;
+  // Apply optimistic status overrides from drag-drop before any filter
+  const issuesWithOverrides = (allIssues.length > 0 ? allIssues : flatIssues).map(i =>
+    statusOverrides[i.id] ? { ...i, status: statusOverrides[i.id] } : i
+  );
+  let displayIssues = issuesWithOverrides;
 
   if (searchQuery.trim()) {
     const q = searchQuery.toLowerCase();
@@ -893,6 +940,21 @@ export default function WsViewPage() {
         {/* ── Main content ──────────────────────────────────────────────── */}
         <main className="flex-1 overflow-auto pt-6 px-8 pb-8 flex flex-col">
 
+          {/* ── Error Toast (drag-drop / delete failures) ─────────────────── */}
+          {dropError && (
+            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-3 bg-red-600 text-white text-sm font-semibold px-5 py-3 rounded-lg shadow-xl animate-in slide-in-from-bottom-4 duration-300">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
+                <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+              {dropError}
+              <button onClick={() => setDropError(null)} className="ml-2 opacity-70 hover:opacity-100 transition-opacity">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+          )}
+
           {/* ── Filter Bar ────────────────────────────────────────────────── */}
           <div className="flex items-center gap-4 mb-6">
             {/* Search Box — visually dominant, fills horizontal space */}
@@ -974,7 +1036,7 @@ export default function WsViewPage() {
           </div>
 
           {activeView === 'backlog' && <BacklogView />}
-          {activeView === 'kanban' && <IssueKanbanBoard issues={displayIssues} onOpenIssue={handleOpenIssue} onAddIssue={() => openCreateIssue('TASK')} onDropIssue={handleDropIssue} />}
+          {activeView === 'kanban' && <IssueKanbanBoard issues={displayIssues} onOpenIssue={handleOpenIssue} onAddIssue={() => openCreateIssue('TASK')} onDropIssue={handleDropIssue} onDeleteIssue={handleDeleteIssue} />}
           {activeView === 'table' && <IssueTableView issues={displayIssues} onOpenIssue={handleOpenIssue} />}
           {activeView === 'progress' && <IssueProgressView issues={displayIssues} members={members} onOpenIssue={handleOpenIssue} />}
         </main>

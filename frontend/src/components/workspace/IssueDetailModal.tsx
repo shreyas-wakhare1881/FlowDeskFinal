@@ -6,8 +6,6 @@ import {
   useCallback,
   useRef,
 } from 'react';
-import ReactQuill from 'react-quill';
-import 'react-quill/dist/quill.snow.css';
 import type { ReactElement } from 'react';
 import { createPortal } from 'react-dom';
 import { useIssues } from '@/lib/IssuesContext';
@@ -19,7 +17,6 @@ import type {
   IssueStatus,
   IssuePriority,
   IssueLinkType,
-  IssueLink,
   Issue,
   UpdateIssuePayload,
 } from '@/types/issue';
@@ -79,11 +76,7 @@ function getInitials(name: string): string {
 }
 
 function formatDate(iso: string): string {
-  const date = new Date(iso);
-  const d = String(date.getDate()).padStart(2, '0');
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const y = date.getFullYear();
-  return `${d}/${m}/${y}`;
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 interface Member { userId: string; name: string; email: string; roleName: string; }
@@ -251,93 +244,76 @@ function InlineEditDescription({
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value ?? '');
+  const ref = useRef<HTMLTextAreaElement>(null);
 
-  useEffect(() => {
-    setDraft(value ?? '');
-  }, [value]);
+  useEffect(() => { setDraft(value ?? ''); }, [value]);
+  useEffect(() => { if (editing) ref.current?.focus(); }, [editing]);
 
   const commit = () => {
     setEditing(false);
-    if (draft !== (value ?? '')) {
-      onSave(draft);
-    }
-  };
-
-  const modules = {
-    toolbar: [
-      [{ 'header': [1, 2, 3, false] }],
-      ['bold', 'italic', 'underline', 'strike', 'blockquote'],
-      [{ 'list': 'ordered' }, { 'list': 'bullet' }],
-      ['link', 'code-block', 'image'],
-      ['clean']
-    ],
+    if (draft !== (value ?? '')) onSave(draft);
   };
 
   if (editing) {
     return (
-      <div className="relative z-10 w-full mb-14 quill-editor-container">
-        <div className="flex flex-col border border-[#DFE1E6] rounded-[3px] bg-white overflow-hidden shadow-sm focus-within:ring-2 focus-within:ring-[#4C9AFF]/20 transition-all">
-          <ReactQuill
-            theme="snow"
-            value={draft}
-            onChange={setDraft}
-            modules={modules}
-            placeholder="Add a detailed description..."
-            className="bg-white min-h-[160px]"
-          />
+      <div className="relative z-10 w-full mb-12">
+        <div className="flex flex-col border border-[#DFE1E6] rounded-[3px] shadow-[0_1px_1px_rgba(9,30,66,0.25),0_0_1px_1px_rgba(9,30,66,0.13)] bg-white overflow-hidden focus-within:border-[#4C9AFF] transition-colors -ml-[1px]">
+           <div className="flex items-center gap-1 px-3 py-1.5 border-b border-[#DFE1E6] bg-white overflow-x-auto min-h-[40px]">
+              <button className="flex items-center gap-0.5 text-[#42526E] hover:bg-slate-100 px-1 py-1 rounded font-serif text-[15px] font-medium">Tt <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg></button>
+              <div className="w-[1px] h-[18px] bg-[#DFE1E6] mx-1"></div>
+              <button className="text-[#42526E] hover:bg-slate-100 p-1.5 rounded font-bold text-[14px]">B</button>
+              <button className="text-[#42526E] hover:bg-slate-100 p-1.5 rounded italic font-serif text-[15px]">I</button>
+              <button className="text-[#42526E] hover:bg-slate-100 pb-1.5 pt-0.5 px-1.5 rounded font-bold tracking-widest text-[13px]">•••</button>
+              <div className="w-[1px] h-[18px] bg-[#DFE1E6] mx-1"></div>
+              <button className="flex items-center gap-0.5 text-[#42526E] hover:bg-slate-100 px-1 py-1 rounded font-bold text-[14px]">A <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg></button>
+              <div className="w-[1px] h-[18px] bg-[#DFE1E6] mx-1"></div>
+              <button className="text-[#42526E] hover:bg-slate-100 p-1.5 rounded"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></button>
+              <button className="text-[#42526E] hover:bg-slate-100 p-1.5 rounded"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="10" y1="6" x2="21" y2="6"/><line x1="10" y1="12" x2="21" y2="12"/><line x1="10" y1="18" x2="21" y2="18"/><path d="M4 6h1v4"/><path d="M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/></svg></button>
+              <div className="w-[1px] h-[18px] bg-[#DFE1E6] mx-1"></div>
+              <button className="text-[#42526E] hover:bg-slate-100 p-1.5 rounded"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></button>
+              <button className="text-[#42526E] hover:bg-slate-100 p-1.5 rounded"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></button>
+              <button className="text-[#42526E] hover:bg-slate-100 p-1.5 rounded"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></button>
+              <button className="text-[#42526E] hover:bg-slate-100 p-1.5 rounded text-[15px] font-bold">@</button>
+              <button className="text-[#42526E] hover:bg-slate-100 p-1.5 rounded"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg></button>
+              <button className="text-[#42526E] hover:bg-slate-100 p-1.5 rounded"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg></button>
+              <button className="text-[#42526E] hover:bg-slate-100 p-1.5 rounded font-bold text-[14px]">&lt;/&gt;</button>
+              <button className="flex items-center gap-0.5 text-[#42526E] hover:bg-slate-100 px-1 py-1 rounded font-medium text-[16px]">+ <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg></button>
+              <div className="w-[1px] h-[18px] bg-[#DFE1E6] mx-1"></div>
+              <button className="p-1 rounded hover:bg-slate-100 ml-1 flex items-center justify-center">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                   <path d="M12 2L2 7l10 5 10-5-10-5z" fill="#0052CC"/>
+                   <path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke="#0052CC" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+           </div>
+           <div className="bg-white">
+             <textarea
+               ref={ref}
+               value={draft}
+               onChange={(e) => setDraft(e.target.value)}
+               rows={4}
+               maxLength={2000}
+               className="w-full min-h-[140px] px-5 py-4 text-[14px] text-[#172B4D] resize-y outline-none placeholder:text-[#6B778C]/80"
+               placeholder="Type /ai for Atlassian Intelligence or @ to mention and notify someone."
+             />
+           </div>
         </div>
-        <div className="flex items-center gap-3 pt-3 absolute -bottom-[46px] left-0">
-          <button
-            onMouseDown={(e) => { e.preventDefault(); commit(); }}
-            className="bg-[#0052CC] hover:bg-[#0047B3] text-white px-4 py-1.5 rounded-[3px] text-[14px] font-bold transition-colors shadow-sm"
-          >
-            Save
-          </button>
-          <button
-            onMouseDown={(e) => { e.preventDefault(); setEditing(false); setDraft(value ?? ''); }}
-            className="text-[#42526E] hover:bg-slate-100 px-4 py-1.5 rounded-[3px] text-[14px] font-medium transition-colors"
-          >
-            Cancel
-          </button>
+        <div className="flex items-center gap-4 bg-transparent pt-3 mt-0 absolute -bottom-[42px] -left-[1px]">
+           <button onMouseDown={(e)=>{e.preventDefault(); commit();}} className="bg-[#0b57d0] hover:bg-[#0047b3] text-white px-3 py-[5px] rounded-[3px] text-[14px] font-bold transition-colors shadow-sm">Save</button>
+           <button onMouseDown={(e)=>{e.preventDefault(); setEditing(false);}} className="text-[#42526E] hover:bg-slate-100 px-3 py-[5px] rounded-[3px] text-[14px] font-medium transition-colors">Cancel</button>
         </div>
-        <style>{`
-          .quill-editor-container .ql-toolbar.ql-snow {
-             border: none;
-             border-bottom: 1px solid #DFE1E6;
-             padding: 8px 12px;
-             background: #FAFBFC;
-          }
-          .quill-editor-container .ql-container.ql-snow {
-             border: none;
-             font-family: inherit;
-             font-size: 14px;
-             min-height: 140px;
-          }
-          .quill-editor-container .ql-editor {
-             min-height: 140px;
-             color: #172B4D;
-          }
-          .quill-editor-container .ql-editor.ql-blank::before {
-             color: #6B778C;
-             font-style: normal;
-             opacity: 0.6;
-          }
-        `}</style>
       </div>
     );
   }
 
   return (
     <div
-      className="text-sm text-[#172B4D] min-h-[44px] cursor-pointer hover:bg-slate-50 border border-transparent hover:border-[#DFE1E6] rounded-[3px] p-3 -ml-3 transition-all break-words overflow-hidden"
+      className="text-[14px] text-[#172B4D] min-h-[40px] cursor-pointer hover:bg-slate-100 rounded p-2 -ml-2 transition-colors break-words"
       onClick={() => setEditing(true)}
-      title="Click to edit"
+      title="Click to edit description"
     >
-      {value && value !== '<p><br></p>' ? (
-        <div 
-          className="prose prose-sm max-w-none prose-slate"
-          dangerouslySetInnerHTML={{ __html: value }} 
-        />
+      {value ? (
+        <p className="whitespace-pre-wrap">{value}</p>
       ) : (
         <p className="text-[#6B778C]">Add a description...</p>
       )}
@@ -362,15 +338,7 @@ export default function IssueDetailModal({ projectId }: { projectId: string }) {
   const [linkLoading, setLinkLoading] = useState(false);
   const [linkResults, setLinkResults] = useState<Issue[]>([]);
 
-  // Links where this issue is the target
-  const [targetLinks, setTargetLinks] = useState<(IssueLink & { source: Issue })[]>([]);
-
-  // Subtask creation state
-  const [showAddSubtask, setShowAddSubtask] = useState(false);
-  const [subtaskDraft, setSubtaskDraft] = useState('');
-  const subtaskRef = useRef<HTMLInputElement>(null);
-
-  // Accordion expanded state for link search results
+  // Accordion expanded state for link search results (story children)
   const [expandedLinkResults, setExpandedLinkResults] = useState<Set<string>>(new Set());
 
   const toggleLinkAccordion = useCallback((id: string) => {
@@ -382,31 +350,6 @@ export default function IssueDetailModal({ projectId }: { projectId: string }) {
     });
   }, []);
 
-  useEffect(() => { if (showAddSubtask) subtaskRef.current?.focus(); }, [showAddSubtask]);
-
-  const handleAddSubtask = async () => {
-    if (!subtaskDraft.trim() || !issue) return;
-    setSaving(true);
-    try {
-      // Logic for subtask type based on parent: EPIC -> STORY, STORY -> TASK, TASK -> TASK
-      const subtaskType = issue.type === 'EPIC' ? 'STORY' : 'TASK';
-      await issuesService.create({
-        projectId,
-        title: subtaskDraft.trim(),
-        type: subtaskType,
-        parentId: issue.id,
-      });
-      setSubtaskDraft('');
-      setShowAddSubtask(false);
-      await fetchIssueDetail(issue.id, projectId);
-      refresh();
-    } catch {
-      setSaveError('Failed to create subtask');
-    } finally {
-      setSaving(false);
-    }
-  };
-
   // Mounted guard for portal
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); return () => setMounted(false); }, []);
@@ -415,14 +358,6 @@ export default function IssueDetailModal({ projectId }: { projectId: string }) {
   useEffect(() => {
     setIssue(selectedIssue);
     setSaveError(null);
-    if (!selectedIssue) {
-      setLinkType('RELATES_TO');
-      setLinkQuery('');
-      setLinkTarget(null);
-      setLinkLoading(false);
-      setLinkResults([]);
-      setExpandedLinkResults(new Set());
-    }
   }, [selectedIssue]);
 
   // Fetch members for assignee dropdown
@@ -615,47 +550,9 @@ export default function IssueDetailModal({ projectId }: { projectId: string }) {
             {/* Subtasks */}
             <div className="mb-8">
               <h3 className="text-[15px] font-semibold text-[#172B4D] mb-3">Subtasks</h3>
-              
-              {!showAddSubtask ? (
-                <div 
-                  onClick={() => setShowAddSubtask(true)}
-                  className="bg-white border border-[#DFE1E6] rounded flex items-center p-2 px-3 text-[14px] text-[#6B778C] font-medium hover:bg-slate-50 cursor-pointer"
-                >
-                  <span className="text-[18px] mr-2">+</span> Add subtask
-                </div>
-              ) : (
-                <div className="flex flex-col border-2 border-[#4C9AFF] rounded bg-white overflow-hidden">
-                   <div className="flex-1 px-3 py-2.5">
-                     <input
-                       ref={subtaskRef}
-                       type="text"
-                       value={subtaskDraft}
-                       onChange={(e) => setSubtaskDraft(e.target.value)}
-                       onKeyDown={(e) => {
-                         if (e.key === 'Enter') handleAddSubtask();
-                         if (e.key === 'Escape') setShowAddSubtask(false);
-                       }}
-                       onBlur={() => { if (!subtaskDraft.trim()) setShowAddSubtask(false); }}
-                       placeholder="What needs to be done?"
-                       className="w-full text-[14px] text-[#172B4D] outline-none placeholder:text-[#6B778C]/70"
-                     />
-                   </div>
-                   <div className="px-3 py-2 flex items-center gap-2 bg-[#F4F5F7] border-t border-[#DFE1E6]">
-                      <button 
-                        onMouseDown={(e) => { e.preventDefault(); handleAddSubtask(); }}
-                        className="bg-[#0052CC] hover:bg-[#0047B3] text-white px-3 py-1 rounded text-[13px] font-bold transition-colors"
-                      >
-                        Create
-                      </button>
-                      <button 
-                        onMouseDown={(e) => { e.preventDefault(); setShowAddSubtask(false); }}
-                        className="text-[#42526E] hover:bg-slate-200 px-3 py-1 rounded text-[13px] font-medium transition-colors"
-                      >
-                        Cancel
-                      </button>
-                   </div>
-                </div>
-              )}
+              <div className="bg-white border border-[#DFE1E6] rounded flex items-center p-2 px-3 text-[14px] text-[#6B778C] font-medium hover:bg-slate-50 cursor-pointer">
+                Add subtask
+              </div>
               
               {issue.children.length > 0 && (
                 <div className="mt-2 flex flex-col border border-[#DFE1E6] rounded divide-y divide-[#DFE1E6]">
@@ -666,12 +563,12 @@ export default function IssueDetailModal({ projectId }: { projectId: string }) {
                       <div
                         key={child.id}
                         onClick={() => handleChildClick(child.id)}
-                        className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-slate-50 cursor-pointer group"
+                        className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-slate-50 cursor-pointer"
                       >
                         <span className={`inline-flex items-center justify-center w-4 h-4 rounded-sm flex-shrink-0 ${child.type === 'STORY' ? 'text-green-500 bg-transparent' : cs.pill}`}>
                           <CIcon />
                         </span>
-                        <span className="text-[13.5px] font-medium text-[#0052CC] group-hover:underline flex-shrink-0 cursor-pointer">{child.issueKey}</span>
+                        <span className="text-[13.5px] font-medium text-[#0052CC] hover:underline flex-shrink-0 cursor-pointer">{child.issueKey}</span>
                         <span className="text-[13.5px] text-[#172B4D] flex-1 truncate">{child.title}</span>
                         {/* Status Mock pill */}
                         <div className="bg-[#DFE1E6] text-[#42526E] font-bold text-[11px] px-2 py-0.5 rounded uppercase flex-shrink-0">
@@ -917,7 +814,11 @@ export default function IssueDetailModal({ projectId }: { projectId: string }) {
                         </>
                      ) : (
                         <>
-                           <span className="text-[#A5ADBA]">No reporter</span>
+           <div className="w-6 h-6 rounded-full bg-slate-100 border border-slate-300 flex items-center justify-center text-[#A5ADBA]">
+             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+               <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+             </svg>
+           </div>
                         </>
                      )}
                    </div>
@@ -927,7 +828,7 @@ export default function IssueDetailModal({ projectId }: { projectId: string }) {
                  <div className="grid grid-cols-[110px_1fr] items-center gap-3 min-h-[32px]">
                    <div className="text-[#6B778C] font-semibold hover:text-[#172B4D] cursor-pointer">Priority</div>
                    <button className="text-[#42526E] hover:bg-slate-100 rounded px-2 py-1 -ml-2 transition-colors text-left flex items-center gap-2">
-                     <span className={`w-2 h-2 rounded-[2px] ${PRIORITY_CONFIG[issue.priority]?.dot}`} /> {PRIORITY_CONFIG[issue.priority]?.label || 'None'}
+                     <span className={`w-2 h-2 rounded-[2px] ${PRIORITY_CONFIG[issue.priority]?.dot}`} /> {issue.priority === 'MEDIUM' ? 'None' : PRIORITY_CONFIG[issue.priority]?.label}
                    </button>
                  </div>
 
@@ -947,73 +848,19 @@ export default function IssueDetailModal({ projectId }: { projectId: string }) {
                  </div>
 
                  {/* ── Estimate ── */}
-                  <div className="grid grid-cols-[110px_1fr] gap-3 min-h-[32px] items-center">
-                    <div className="text-[#6B778C] font-semibold hover:text-[#172B4D] cursor-pointer">Estimate</div>
-                    <input
-                      type="text"
-                      className="w-full bg-white hover:bg-slate-50 border border-transparent hover:border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded px-1.5 py-1 text-[13px] text-[#172B4D] outline-none transition-all placeholder:text-slate-400 font-medium"
-                      placeholder="Add estimate..."
-                      defaultValue={issue.estimate ?? ''}
-                      onBlur={(e) => {
-                        const val = e.target.value.trim();
-                        if (val !== (issue.estimate ?? '')) {
-                          save({ estimate: val || null });
-                        }
-                      }}
-                    />
-                  </div>
+                 <div className="grid grid-cols-[110px_1fr] gap-3 min-h-[32px]">
+                   <div className="text-[#6B778C] font-semibold hover:text-[#172B4D] cursor-pointer pt-1 line-clamp-2">Estimate</div>
+                   <span className="text-[#172B4D] px-1 pt-1">None</span>
+                 </div>
 
-                  {/* ── Due date ── */}
-                  <div className="grid grid-cols-[110px_1fr] items-center gap-3 min-h-[32px]">
-                    <div className="text-[#6B778C] font-semibold hover:text-[#172B4D] cursor-pointer">Due date</div>
-                    <div className="relative group/date-input">
-                      <input
-                        type="text"
-                        className="w-full bg-white hover:bg-slate-50 border border-transparent hover:border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded px-1.5 py-1 text-[13px] text-[#172B4D] outline-none transition-all font-medium placeholder:text-slate-300 pr-7"
-                        placeholder="dd/mm/yyyy"
-                        value={(() => {
-                           if (!issue.dueDate) return '';
-                           const [y, m, d] = issue.dueDate.split('T')[0].split('-');
-                           return `${d}/${m}/${y}`;
-                        })()}
-                        onChange={(e) => {
-                          let val = e.target.value.replace(/\D/g, '').slice(0, 8);
-                          // We wait for 8 digits to save automatically
-                          if (val.length === 8) {
-                             const d = val.slice(0, 2);
-                             const m = val.slice(2, 4);
-                             const y = val.slice(4, 8);
-                             if (Number(m) <= 12 && Number(d) <= 31) {
-                               save({ dueDate: `${y}-${m}-${d}` });
-                             }
-                          } else if (val.length === 0) {
-                             save({ dueDate: null });
-                          }
-                        }}
-                        maxLength={10}
-                      />
-                      <div className="absolute right-1.5 top-1/2 -translate-y-1/2 opacity-0 group-hover/date-input:opacity-100 transition-opacity">
-                         <svg 
-                           className="text-slate-400 hover:text-blue-500 cursor-pointer"
-                           onClick={(e) => {
-                             const picker = (e.currentTarget.parentElement?.querySelector('input[type="date"]') as HTMLInputElement);
-                             picker?.showPicker();
-                           }}
-                           width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-                         >
-                           <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-                         </svg>
-                         <input 
-                           type="date" 
-                           className="absolute inset-0 opacity-0 w-0 h-0 pointer-events-none" 
-                           onChange={(e) => {
-                             if (!e.target.value) return;
-                             save({ dueDate: e.target.value });
-                           }}
-                         />
-                      </div>
-                    </div>
-                  </div>
+                 {/* ── Due date ── */}
+                 <div className="grid grid-cols-[110px_1fr] items-center gap-3 min-h-[32px]">
+                   <div className="text-[#6B778C] font-semibold hover:text-[#172B4D] cursor-pointer">Due date</div>
+                   <button className="border border-[#DFE1E6] rounded-[3px] bg-white hover:bg-[#F4F5F7] flex items-center gap-2 px-2 py-1 text-[13px] text-[#172B4D] transition-colors">
+                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                     Apr 4, 2026
+                   </button>
+                 </div>
 
                  {/* ── Created ── */}
                  <div className="grid grid-cols-[110px_1fr] items-center gap-3 min-h-[32px]">

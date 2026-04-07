@@ -1,3 +1,16 @@
+/**
+ * @deprecated DEAD CODE — This component is NOT imported or used anywhere.
+ *
+ * It renders PROJECTS (from ProjectsContext) as Kanban cards — which is
+ * architecturally incorrect for the issue-driven Kanban system.
+ *
+ * The real Kanban board is `IssueKanbanBoard` defined inside
+ * `src/app/(workspace)/workspace/[projectId]/ws-view/page.tsx`
+ * which is fully Issue-driven (IssuesContext + IssuesService).
+ *
+ * DO NOT import this file. It exists only for historical reference
+ * and will be removed in a future cleanup pass.
+ */
 'use client';
 
 import { useState, useEffect } from 'react';

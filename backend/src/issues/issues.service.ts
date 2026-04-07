@@ -156,20 +156,19 @@ export class IssuesService {
   // ── CRUD ─────────────────────────────────────────────────────────────────
 
   async create(dto: CreateIssueDto) {
-    // Resolve project UUID
+    // Resolve project UUID (outside transaction — read-only, safe)
     const project = await this.prisma.project.findFirst({
       where: { OR: [{ id: dto.projectId }, { projectID: dto.projectId }] },
-      select: { id: true },
+      select: { id: true, projectID: true },
     });
     if (!project) throw new NotFoundException(`Project not found: ${dto.projectId}`);
 
     await this.validateHierarchy(dto.type, dto.parentId);
 
     // ── EPIC container rules ──────────────────────────────────────────────────
-    // EPICs are pure containers: no assignee, no status override, no parent.
     if (dto.type === IssueType.EPIC) {
       dto.assigneeId = undefined;
-      dto.status = undefined; // stays as TODO default — not user-settable
+      dto.status = undefined;
     }
 
     // Validate assignee belongs to the project
@@ -178,31 +177,40 @@ export class IssuesService {
         where: { userId: dto.assigneeId, projectId: project.id },
       });
       if (!membership) {
-        throw new BadRequestException(
-          'Assignee must be a member of this project',
-        );
+        throw new BadRequestException('Assignee must be a member of this project');
       }
     }
 
-    const issueKey = await this.generateIssueKey(dto.projectId);
+    // ── Atomic: key generation + insert in a single serializable transaction ──
+    // Prevents race condition where two concurrent creates receive the same count
+    // and collide on the issueKey UNIQUE constraint.
+    return this.prisma.$transaction(
+      async (tx) => {
+        const count = await tx.issue.count({ where: { projectId: project.id } });
+        const issueKey = `${project.projectID}-${count + 1}`;
 
-    return this.prisma.issue.create({
-      data: {
-        issueKey,
-        type: dto.type,
-        title: dto.title,
-        description: dto.description,
-        status: dto.status ?? IssueStatus.TODO,
-        priority: dto.priority ?? IssuePriority.MEDIUM,
-        parentId: dto.parentId ?? null,
-        projectId: project.id,
-        assigneeId: dto.assigneeId ?? null,
-        reporterId: dto.reporterId ?? null,
-        estimate: dto.estimate ? (isNaN(Number(dto.estimate)) ? dto.estimate : `${dto.estimate}h`) : null,
-        dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
+        return tx.issue.create({
+          data: {
+            issueKey,
+            type: dto.type,
+            title: dto.title,
+            description: dto.description,
+            status: dto.status ?? IssueStatus.TODO,
+            priority: dto.priority ?? IssuePriority.MEDIUM,
+            parentId: dto.parentId ?? null,
+            projectId: project.id,
+            assigneeId: dto.assigneeId ?? null,
+            reporterId: dto.reporterId ?? null,
+            estimate: dto.estimate
+              ? isNaN(Number(dto.estimate)) ? dto.estimate : `${dto.estimate}h`
+              : null,
+            dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
+          },
+          select: ISSUE_SELECT,
+        });
       },
-      select: ISSUE_SELECT,
-    });
+      { isolationLevel: 'Serializable' },
+    );
   }
 
   /**
