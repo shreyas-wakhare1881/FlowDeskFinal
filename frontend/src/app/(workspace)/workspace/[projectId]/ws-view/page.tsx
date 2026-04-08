@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { ReactElement } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import WsSidebar from '@/components/workspace/WsSidebar';
@@ -10,6 +10,7 @@ import AddPeopleModal from '@/components/dashboard/AddPeopleModal';
 import { useIssues } from '@/lib/IssuesContext';
 import { useIssueModal } from '@/lib/IssueModalContext';
 import { issuesService } from '@/lib/issues.service';
+import { boardColumnsService, type BoardColumn } from '@/lib/board-columns.service';
 import { projectsService } from '@/lib/projects.service';
 import { useAccordion } from '@/hooks/useAccordion';
 import type { Issue, IssueType, IssueStatus, IssuePriority } from '@/types/issue';
@@ -76,7 +77,7 @@ function getInitials(name: string): string {
 
 // ─── Issue Kanban ─────────────────────────────────────────────────────────────
 
-// Column SVG icons
+// Column SVG icons — kept for reference in other parts of the app
 const KanbanColumnIcon = ({ id }: { id: IssueStatus }) => {
   if (id === 'TODO') return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -94,6 +95,8 @@ const KanbanColumnIcon = ({ id }: { id: IssueStatus }) => {
     </svg>
   );
 };
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _KanbanColumnIcon = KanbanColumnIcon; // suppress unused warning — kept for TS type compat
 
 function HierarchicalChildItem({ issueId, allIssues, depth = 0, onOpen }: { issueId: string, allIssues: Issue[], depth?: number, onOpen: (id: string) => void }) {
   const issue = allIssues.find(i => i.id === issueId);
@@ -150,6 +153,7 @@ function KanbanCard({ issue, allIssues, onOpen, onDelete }: { issue: Issue; allI
   const expanded = isExpanded(issue.id);
   const children = allIssues.filter(i => i.parentId === issue.id);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
 
   return (
     <div className="border border-slate-200 rounded-[3px] bg-white shadow-[0_1px_2px_rgba(9,30,66,0.15)] flex flex-col flex-shrink-0 group/card hover:bg-[#FAFBFC] hover:shadow-[0_2px_4px_rgba(9,30,66,0.2)] transition-colors">
@@ -179,14 +183,31 @@ function KanbanCard({ issue, allIssues, onOpen, onDelete }: { issue: Issue; allI
           <div className="relative">
             <button
               className="text-[#6B778C] hover:bg-[#EBECF0] rounded translate-y-[-2px] tracking-widest px-0.5 opacity-0 group-hover/card:opacity-100 transition-opacity flex-shrink-0 font-bold"
-              onClick={(e) => { e.stopPropagation(); setIsMenuOpen(!isMenuOpen); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (isMenuOpen) {
+                  setIsMenuOpen(false);
+                  setMenuPos(null);
+                  return;
+                }
+                const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
+                setMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+                setIsMenuOpen(true);
+              }}
             >
               •••
             </button>
-            {isMenuOpen && (
+            {isMenuOpen && menuPos && (
               <>
-                <div className="fixed inset-0 z-40 cursor-default" onClick={(e) => { e.stopPropagation(); setIsMenuOpen(false); }} />
-                <div className="absolute right-0 top-6 w-48 bg-white border border-[#DFE1E6] rounded-[3px] shadow-[0_4px_8px_rgba(9,30,66,0.15)] z-50 flex flex-col py-1.5 text-[14px] text-[#172B4D] font-normal" onClick={(e) => e.stopPropagation()}>
+                <div
+                  className="fixed inset-0 z-[9998] cursor-default"
+                  onClick={(e) => { e.stopPropagation(); setIsMenuOpen(false); setMenuPos(null); }}
+                />
+                <div
+                  className="fixed w-48 bg-white border border-[#DFE1E6] rounded-[3px] shadow-[0_4px_8px_rgba(9,30,66,0.15)] z-[9999] flex flex-col py-1.5 text-[14px] text-[#172B4D] font-normal"
+                  style={{ top: menuPos.top, right: menuPos.right }}
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <button className="flex items-center justify-between px-4 py-1.5 hover:bg-[#EBECF0] w-full text-left transition-colors cursor-pointer">
                     Move work item <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[#6B778C]"><polyline points="9 18 15 12 9 6" /></svg>
                   </button>
@@ -207,7 +228,7 @@ function KanbanCard({ issue, allIssues, onOpen, onDelete }: { issue: Issue; allI
                   <button className="px-4 py-1.5 hover:bg-[#EBECF0] w-full text-left transition-colors cursor-pointer">Archive</button>
                   <button
                     className="px-4 py-1.5 hover:bg-red-50 text-red-600 w-full text-left transition-colors cursor-pointer"
-                    onClick={(e) => { e.stopPropagation(); setIsMenuOpen(false); onDelete(issue.id); }}
+                    onClick={(e) => { e.stopPropagation(); setIsMenuOpen(false); setMenuPos(null); onDelete(issue.id); }}
                   >Delete</button>
                 </div>
               </>
@@ -312,111 +333,611 @@ function KanbanCard({ issue, allIssues, onOpen, onDelete }: { issue: Issue; allI
 }
 
 
-function IssueKanbanBoard({ issues, onOpenIssue, onAddIssue, onDropIssue, onDeleteIssue }: { issues: Issue[]; onOpenIssue: (id: string) => void; onAddIssue: () => void; onDropIssue: (id: string, status: IssueStatus) => void; onDeleteIssue: (id: string) => void }) {
-  // Filter out EPICs from Kanban board — Kanban shows only Task, Bug, Story
-  const kanbanColumns: { id: IssueStatus; label: string; color: string }[] = [
-    { id: 'TODO', label: 'To Do', color: 'border-slate-300 bg-slate-50' },
-    { id: 'IN_PROGRESS', label: 'In Progress', color: 'border-blue-300 bg-blue-50' },
-    { id: 'DONE', label: 'Done', color: 'border-green-300 bg-green-50' },
-  ];
-  const kanbanIssues = issues.filter(i => i.type !== 'EPIC');
+// ─── Dynamic Kanban Board ─────────────────────────────────────────────────────
+// Fully dynamic: columns fetched from DB, no hardcoding.
+// Features: create/rename/delete columns, drag-drop cards & columns, filter.
 
-  if (kanbanIssues.length === 0) {
+type KanbanFilter = 'all' | 'recently_updated' | 'assigned_to_me';
+
+interface DeleteConfirm {
+  column: BoardColumn;
+  moveToColumnId: string | null; // null = leave unassigned (backlog)
+}
+
+function IssueKanbanBoard({
+  issues,
+  projectId,
+  onOpenIssue,
+  onAddIssue,
+  onDropIssue,       // (issueId: string, columnId: string) => void
+  onDeleteIssue,
+  kanbanFilter,
+}: {
+  issues: Issue[];
+  projectId: string;
+  onOpenIssue: (id: string) => void;
+  onAddIssue: () => void;
+  onDropIssue: (issueId: string, columnId: string) => Promise<void>;
+  onDeleteIssue: (id: string) => void;
+  kanbanFilter: KanbanFilter;
+}) {
+  // ── Column state ────────────────────────────────────────────────────────────
+  const [columns, setColumns]           = useState<BoardColumn[]>([]);
+  const [colLoading, setColLoading]     = useState(true);
+  const [colError, setColError]         = useState<string | null>(null);
+
+  // ── Filtered issues state (backend-driven filter) ───────────────────────────
+  const [filteredIssues, setFilteredIssues] = useState<Issue[]>(issues);
+  const [filterLoading, setFilterLoading]   = useState(false);
+
+  // ── Optimistic column overrides on drag-drop ─────────────────────────────────
+  const [localColOverrides, setLocalColOverrides] = useState<Record<string, string | null>>({});
+  const [dropError, setDropError]                 = useState<string | null>(null);
+
+  // ── Inline column name edit ──────────────────────────────────────────────────
+  const [editingColId, setEditingColId] = useState<string | null>(null);
+  const [editingName, setEditingName]   = useState('');
+  const editInputRef = useRef<HTMLInputElement>(null);
+
+  // ── Column action menu ───────────────────────────────────────────────────────
+  const [menuColId, setMenuColId] = useState<string | null>(null);
+  const [menuPos, setMenuPos]     = useState<{ top: number; right: number } | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // ── Create new column ────────────────────────────────────────────────────────
+  const [creating, setCreating]         = useState(false);
+  const [newColName, setNewColName]     = useState('');
+  const [createLoading, setCreateLoading] = useState(false);
+  const newColInputRef = useRef<HTMLInputElement>(null);
+
+  // ── Delete confirmation ──────────────────────────────────────────────────────
+  const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirm | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
+  // ── Column drag-to-reorder state ─────────────────────────────────────────────
+  const [dragColId, setDragColId]         = useState<string | null>(null);
+  const [dragOverColId, setDragOverColId] = useState<string | null>(null);
+  // distinguishes card-drags from column-drags
+  const dragTypeRef = useRef<'card' | 'column'>('card');
+
+  // ── Load columns ─────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!projectId) {
+      setColumns([]);
+      setColError('Missing projectId');
+      setColLoading(false);
+      return;
+    }
+
+    setColLoading(true);
+    setColError(null);
+    boardColumnsService.getAll(projectId)
+      .then(setColumns)
+      .catch(() => setColError('Failed to load board columns'))
+      .finally(() => setColLoading(false));
+  }, [projectId]);
+
+  // ── Sync filtered issues with filter state ────────────────────────────────────
+  useEffect(() => {
+    if (kanbanFilter === 'all') {
+      setFilteredIssues(issues);
+      return;
+    }
+    setFilterLoading(true);
+    issuesService.getKanban(projectId, kanbanFilter)
+      .then(setFilteredIssues)
+      .catch(() => setFilteredIssues(issues))
+      .finally(() => setFilterLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kanbanFilter, projectId]);
+
+  // Keep 'all' issues in sync with context updates (no stale closure)
+  useEffect(() => {
+    if (kanbanFilter === 'all') setFilteredIssues(issues);
+  }, [issues, kanbanFilter]);
+
+  // ── Close menus on outside click ──────────────────────────────────────────────
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuColId(null);
+        setMenuPos(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  // menuRef doesn't change so this is stable
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Focus new column input after create mode activates
+  useEffect(() => {
+    if (creating) setTimeout(() => newColInputRef.current?.focus(), 50);
+  }, [creating]);
+
+  // Focus inline edit input when editing starts
+  useEffect(() => {
+    if (editingColId) setTimeout(() => editInputRef.current?.focus(), 50);
+  }, [editingColId]);
+
+  // ── Issue grouping by columnId ────────────────────────────────────────────────
+  const boardIssues = filteredIssues.filter(i => i.type !== 'EPIC');
+
+  // Apply local optimistic overrides
+  const issuesWithOverrides = boardIssues.map(i =>
+    localColOverrides[i.id] !== undefined
+      ? { ...i, columnId: localColOverrides[i.id] }
+      : i,
+  );
+
+  function issuesForColumn(colId: string): Issue[] {
+    return issuesWithOverrides.filter(i => i.columnId === colId);
+  }
+
+  // ── Card drag-drop (existing behavior — now uses columnId) ────────────────────
+  const handleCardDrop = async (issueId: string, targetColumnId: string) => {
+    const prevColumnId = issuesWithOverrides.find(i => i.id === issueId)?.columnId ?? null;
+    if (prevColumnId === targetColumnId) return;
+
+    setLocalColOverrides(prev => ({ ...prev, [issueId]: targetColumnId }));
+    try {
+      await onDropIssue(issueId, targetColumnId);
+      setLocalColOverrides(prev => { const n = { ...prev }; delete n[issueId]; return n; });
+    } catch {
+      setLocalColOverrides(prev => ({ ...prev, [issueId]: prevColumnId }));
+      setDropError('Failed to move issue. Please try again.');
+      setTimeout(() => setDropError(null), 4000);
+    }
+  };
+
+  // ── Column CRUD handlers ──────────────────────────────────────────────────────
+  const handleCreateColumn = async () => {
+    const name = newColName.trim();
+    if (!name) { setCreating(false); setNewColName(''); return; }
+    setCreateLoading(true);
+    try {
+      if (!projectId) return;
+      const created = await boardColumnsService.create(projectId, name);
+      setColumns(prev => [...prev, created].sort((a, b) => a.position - b.position));
+      setCreating(false);
+      setNewColName('');
+    } catch {
+      setDropError('Failed to create column.');
+      setTimeout(() => setDropError(null), 4000);
+    } finally {
+      setCreateLoading(false);
+    }
+  };
+
+  const startEdit = (col: BoardColumn) => {
+    setMenuColId(null);
+    setMenuPos(null);
+    setEditingColId(col.id);
+    setEditingName(col.name);
+  };
+
+  const handleRenameColumn = async (colId: string) => {
+    const name = editingName.trim();
+    setEditingColId(null);
+    if (!name) return;
+    const original = columns.find(c => c.id === colId);
+    if (!original || original.name === name) return;
+
+    setColumns(prev => prev.map(c => c.id === colId ? { ...c, name } : c));
+    try {
+      if (!projectId) return;
+      await boardColumnsService.update(colId, projectId, { name });
+    } catch {
+      setColumns(prev => prev.map(c => c.id === colId ? { ...c, name: original.name } : c));
+      setDropError('Failed to rename column.');
+      setTimeout(() => setDropError(null), 4000);
+    }
+  };
+
+  const initiateDelete = (col: BoardColumn) => {
+    setMenuColId(null);
+    setMenuPos(null);
+    setDeleteConfirm({ column: col, moveToColumnId: null });
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteConfirm) return;
+    setDeleteLoading(true);
+    try {
+      if (!projectId) return;
+      await boardColumnsService.delete(
+        deleteConfirm.column.id,
+        projectId,
+        deleteConfirm.moveToColumnId ?? undefined,
+      );
+      setColumns(prev => prev.filter(c => c.id !== deleteConfirm.column.id));
+      setDeleteConfirm(null);
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? err?.message ?? 'Failed to delete column.';
+      setDropError(msg);
+      setTimeout(() => setDropError(null), 5000);
+      setDeleteConfirm(null);
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  // ── Column drag-to-reorder ────────────────────────────────────────────────────
+  const handleColumnDragStart = (colId: string, e: React.DragEvent) => {
+    e.stopPropagation();
+    dragTypeRef.current = 'column';
+    setDragColId(colId);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('column-drag', colId);
+  };
+
+  const handleColumnDrop = async (targetColId: string, e: React.DragEvent) => {
+    e.preventDefault();
+    if (dragTypeRef.current !== 'column' || !dragColId || dragColId === targetColId) {
+      setDragColId(null); setDragOverColId(null);
+      return;
+    }
+    const reordered = [...columns];
+    const fromIdx = reordered.findIndex(c => c.id === dragColId);
+    const toIdx   = reordered.findIndex(c => c.id === targetColId);
+    const [moved] = reordered.splice(fromIdx, 1);
+    reordered.splice(toIdx, 0, moved);
+    const withPositions = reordered.map((c, idx) => ({ ...c, position: idx }));
+    setColumns(withPositions);
+    setDragColId(null); setDragOverColId(null);
+    try {
+      if (!projectId) return;
+      await boardColumnsService.reorder(projectId, withPositions.map(c => ({ id: c.id, position: c.position })));
+    } catch {
+      // Reload columns from server on failure
+      boardColumnsService.getAll(projectId).then(setColumns).catch(() => {});
+      setDropError('Failed to reorder columns.');
+      setTimeout(() => setDropError(null), 4000);
+    }
+  };
+
+  // ── Loading / error states ────────────────────────────────────────────────────
+  if (colLoading) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 text-center bg-white rounded-2xl border border-slate-200 w-full h-[400px]">
-        <svg className="w-16 h-16 text-slate-200 mb-4" fill="none" stroke="currentColor" strokeWidth={1} viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-        </svg>
-        <h3 className="text-lg font-bold text-slate-800 mb-2">No tasks yet</h3>
-        <p className="text-slate-500 text-sm mb-6">Your board is empty. Get started by creating a new task.</p>
-        <button
-          onClick={onAddIssue}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl text-sm font-semibold transition-colors shadow-sm"
-        >
-          Create Task
-        </button>
+      <div className="flex gap-3 overflow-x-hidden pb-4 items-start w-full">
+        {[1, 2, 3].map(i => (
+          <div key={i} className="flex-1 min-w-0 max-w-[300px] bg-white rounded-[6px] shadow-sm p-4 animate-pulse">
+            <div className="h-5 bg-slate-200 rounded w-1/2 mb-4" />
+            {[1, 2].map(j => <div key={j} className="h-24 bg-white rounded-lg border border-slate-100 mb-3" />)}
+          </div>
+        ))}
       </div>
     );
   }
 
+  if (colError) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <p className="text-red-500 text-sm font-semibold">{colError}</p>
+      </div>
+    );
+  }
+
+  // Dynamic sizing + scroll threshold
+  // - Up to 5 columns: compress to fit (no horizontal scroll)
+  // - >5 columns: allow horizontal scroll
+  const enableHorizontalScroll = columns.length > 5;
+  const columnSizing = enableHorizontalScroll
+    ? 'flex-1 min-w-[220px] max-w-[300px]'
+    : 'flex-1 min-w-0 max-w-[300px]';
+
   return (
-    <div className="flex gap-6 overflow-x-auto h-full pb-4 items-start w-full min-w-0">
-      {kanbanColumns.map((col) => {
-        const colIssues = kanbanIssues.filter((i) => i.status === col.id);
-        const issueMap = new Map(kanbanIssues.map((i) => [i.id, i]));
-        const rootIssues = colIssues.filter(
-          (i) => !i.parentId || !issueMap.has(i.parentId),
-        );
+    <div className="flex flex-col h-full">
 
-        return (
-          <div
-            key={col.id}
-            className={`rounded-lg bg-slate-50/50 px-4 pt-4 pb-2 w-[340px] flex-shrink-0 h-max max-h-full flex flex-col border ${col.color}`}
-            onDragOver={(e) => {
-              e.preventDefault();
-              e.dataTransfer.dropEffect = 'move';
-              e.currentTarget.classList.add('ring-2', 'ring-blue-400', 'ring-offset-1');
-            }}
-            onDragLeave={(e) => {
-              e.currentTarget.classList.remove('ring-2', 'ring-blue-400', 'ring-offset-1');
-            }}
-            onDrop={(e) => {
-              e.preventDefault();
-              e.currentTarget.classList.remove('ring-2', 'ring-blue-400', 'ring-offset-1');
-              const issueId = e.dataTransfer.getData('text/plain');
-              if (issueId) {
-                onDropIssue(issueId, col.id);
-              }
-            }}
-          >
-            {/* Column header */}
-            <div className="flex items-center justify-between mx-1 mb-4 flex-shrink-0 sticky top-0 z-10 py-1">
-              <div className="flex items-center gap-2 font-bold text-[14px] text-slate-700 uppercase tracking-wide">
-                <KanbanColumnIcon id={col.id} />
-                <span>{col.label}</span>
-              </div>
-              <span className="bg-slate-200 text-slate-700 text-[12px] font-bold px-2 py-0.5 rounded-full">
-                {colIssues.length}
-              </span>
-            </div>
+      {/* ── Columns row ────────────────────────────────────────────────────────── */}
+      <div
+        className={[
+          'flex gap-3 pb-4 items-start flex-1 min-h-0 w-full',
+          enableHorizontalScroll ? 'overflow-x-auto' : 'overflow-x-hidden',
+        ].join(' ')}
+      >
 
-            {/* Cards container inside column (scrollable) */}
-            <div className="flex flex-col gap-3 flex-1 overflow-y-auto px-1 pb-4 min-h-[50px] scrollbar-thin scrollbar-thumb-slate-300">
-              {colIssues.length === 0 && (
-                <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-slate-200 rounded-lg bg-slate-50/50 mt-2">
-                  <span className="text-[13px] text-slate-400 font-medium">No tasks yet</span>
+        {columns.map(col => {
+          const colIssues = issuesForColumn(col.id);
+
+          // For column-drag visual: only show root issues (no duplicates from parent-child)
+          const issueMap = new Map(issuesWithOverrides.map(i => [i.id, i]));
+          const rootColIssues = colIssues.filter(i => !i.parentId || !issueMap.has(i.parentId));
+
+          const normalizedColName = col.name.trim().toLowerCase().replace(/[\s-]+/g, '');
+          const isToDoColumn = col.position === 0 || normalizedColName === 'todo';
+
+          return (
+            <div
+              key={col.id}
+              className={[
+                `rounded-[6px] flex flex-col transition-all shadow-sm ${columnSizing}`,
+                dragOverColId === col.id && dragColId !== col.id
+                  ? 'ring-2 ring-blue-400 ring-offset-1'
+                  : '',
+              ].join(' ')}
+              style={{ background: '#fff' }}
+              // Card drop
+              onDragOver={e => {
+                e.preventDefault();
+                if (dragTypeRef.current === 'card') {
+                  e.dataTransfer.dropEffect = 'move';
+                }
+                setDragOverColId(col.id);
+              }}
+              onDragLeave={e => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                  setDragOverColId(null);
+                }
+              }}
+              onDrop={e => {
+                e.preventDefault();
+                if (dragTypeRef.current === 'column') {
+                  handleColumnDrop(col.id, e);
+                } else {
+                  const issueId = e.dataTransfer.getData('text/plain');
+                  if (issueId) handleCardDrop(issueId, col.id);
+                }
+                setDragOverColId(null);
+              }}
+            >
+              {/* Column Header */}
+              <div
+                className="flex items-center justify-between px-2.5 pt-2.5 pb-1.5 cursor-grab active:cursor-grabbing select-none"
+                draggable
+                onDragStart={e => handleColumnDragStart(col.id, e)}
+                onDragEnd={() => { setDragColId(null); setDragOverColId(null); }}
+              >
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  {/* Color accent dot */}
+                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: col.color }} />
+
+                  {/* Inline editable name */}
+                  {editingColId === col.id ? (
+                    <input
+                      ref={editInputRef}
+                      value={editingName}
+                      onChange={e => setEditingName(e.target.value)}
+                      onBlur={() => handleRenameColumn(col.id)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') handleRenameColumn(col.id);
+                        if (e.key === 'Escape') setEditingColId(null);
+                      }}
+                      onMouseDown={e => e.stopPropagation()}
+                      onDragStart={e => e.preventDefault()}
+                      className="flex-1 min-w-0 text-[13.5px] font-bold text-[#172B4D] bg-white border border-[#4C9AFF] rounded px-2 py-0.5 focus:outline-none focus:ring-2 focus:ring-[#4C9AFF]/30"
+                    />
+                  ) : (
+                    <span
+                      className="text-[13.5px] font-bold text-[#172B4D] uppercase tracking-wide truncate cursor-text"
+                      onDoubleClick={() => startEdit(col)}
+                      title="Double-click to rename"
+                    >
+                      {col.name}
+                    </span>
+                  )}
+
+                  {/* Count badge */}
+                  <span className="ml-1 flex-shrink-0 text-[11px] font-bold text-[#5E6C84] bg-[#DFE1E6] rounded-full px-1.5 py-0.5 leading-none">
+                    {colIssues.length}
+                  </span>
                 </div>
-              )}
-              {rootIssues.map((issue) => {
-                return (
+
+                {/* Column action menu trigger */}
+                <div className="relative ml-1">
+                  <button
+                    className="flex items-center justify-center w-7 h-7 rounded text-[#6B778C] hover:bg-[#DFE1E6] transition-colors flex-shrink-0"
+                    onMouseDown={e => e.stopPropagation()}
+                    onClick={e => {
+                      e.stopPropagation();
+                      if (menuColId === col.id) {
+                        setMenuColId(null);
+                        setMenuPos(null);
+                      } else {
+                        const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
+                        setMenuColId(col.id);
+                        setMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+                      }
+                    }}
+                    title="Column options"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                      <circle cx="12" cy="5" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="19" r="1.5" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              {/* Cards area */}
+              <div className="flex flex-col gap-2 px-2 pb-2 min-h-[60px] overflow-y-auto max-h-[calc(100vh-320px)] fd-hide-scrollbar">
+                {rootColIssues.length === 0 && (
+                  <div className="flex items-center justify-center h-16 border-2 border-dashed border-[#DFE1E6] rounded-[3px] mt-1 bg-[#F8F9FA]">
+                    <span className="text-[12px] text-[#5E6C84]">Drop issues here</span>
+                  </div>
+                )}
+                {rootColIssues.map(issue => (
                   <KanbanCard
                     key={issue.id}
                     issue={issue}
-                    allIssues={issues}
+                    allIssues={issuesWithOverrides}
                     onOpen={onOpenIssue}
                     onDelete={onDeleteIssue}
                   />
-                );
-              })}
+                ))}
+              </div>
 
-              {/* Inline Add Issue logic — only visible in To Do column */}
-              {col.id === 'TODO' && (
+              {/* Add issue inside column */}
+              {isToDoColumn && (
                 <button
                   onClick={onAddIssue}
-                  className="group flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-lg p-3 hover:border-blue-400 hover:bg-blue-50 transition-all mt-1 bg-white cursor-pointer"
+                  className="flex items-center gap-1.5 mx-2 mb-2 mt-1 px-2 py-1.5 text-[13px] text-[#5E6C84] hover:text-[#172B4D] hover:bg-[#EBECF0] rounded-[3px] transition-colors"
                 >
-                  <div className="flex items-center justify-center w-8 h-8 rounded-full bg-slate-100 group-hover:bg-blue-100 transition-colors">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-slate-500 group-hover:text-blue-600">
-                      <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-                    </svg>
-                  </div>
-                  <span className="text-[12px] font-bold text-slate-500 mt-2 group-hover:text-blue-700 transition-colors">Create issue</span>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                  Create issue
                 </button>
               )}
             </div>
+          );
+        })}
+
+        {/* ── Create Column button / inline input ────────────────────────────── */}
+        {creating ? (
+          <div className={`rounded-[6px] p-3 flex flex-col gap-2 bg-white shadow-sm ${columnSizing}`}>
+            <input
+              ref={newColInputRef}
+              value={newColName}
+              onChange={e => setNewColName(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') handleCreateColumn();
+                if (e.key === 'Escape') { setCreating(false); setNewColName(''); }
+              }}
+              placeholder="Column name..."
+              maxLength={60}
+              className="w-full text-[13.5px] font-bold text-[#172B4D] bg-white border border-[#4C9AFF] rounded px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#4C9AFF]/30 placeholder-[#A5ADBA]"
+            />
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleCreateColumn}
+                disabled={createLoading || !newColName.trim()}
+                className="px-3 py-1.5 bg-[#0052CC] hover:bg-[#0047B3] disabled:opacity-50 text-white text-[12px] font-bold rounded-[3px] transition-colors"
+              >
+                {createLoading ? 'Creating…' : 'Create'}
+              </button>
+              <button
+                onClick={() => { setCreating(false); setNewColName(''); }}
+                className="p-1.5 text-[#5E6C84] hover:bg-[#DFE1E6] rounded-[3px] transition-colors"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
           </div>
+        ) : (
+          <button
+            onClick={() => setCreating(true)}
+            title="Create column"
+            className="flex-shrink-0 w-8 h-8 rounded-[4px] flex items-center justify-center text-[#5E6C84] hover:text-[#172B4D] hover:bg-[#DFE1E6] border-2 border-dashed border-[#C1C7D0] hover:border-[#4C9AFF] transition-all self-start mt-1"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+          </button>
+        )}
+      </div>
+
+      {/* ── Column action menu (fixed-position, never clipped by overflow) ─────── */}
+      {menuColId && menuPos && (() => {
+        const col = columns.find(c => c.id === menuColId);
+        if (!col) return null;
+        return (
+          <>
+            <div className="fixed inset-0 z-[9998]" onClick={() => { setMenuColId(null); setMenuPos(null); }} />
+            <div
+              ref={menuRef}
+              className="fixed w-44 bg-white border border-[#DFE1E6] rounded-[3px] shadow-[0_4px_12px_rgba(9,30,66,0.15)] z-[9999] py-1"
+              style={{ top: menuPos.top, right: menuPos.right }}
+              onClick={e => e.stopPropagation()}
+            >
+              <button
+                className="w-full text-left px-4 py-2 text-[13px] text-[#172B4D] hover:bg-[#EBECF0] flex items-center gap-2.5 transition-colors"
+                onClick={() => { setMenuColId(null); setMenuPos(null); startEdit(col); }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4z"/></svg>
+                Rename
+              </button>
+              <div className="h-px bg-[#DFE1E6] my-1" />
+              <button
+                className="w-full text-left px-4 py-2 text-[13px] text-red-600 hover:bg-red-50 flex items-center gap-2.5 transition-colors"
+                onClick={() => { setMenuColId(null); setMenuPos(null); initiateDelete(col); }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+                Delete
+              </button>
+            </div>
+          </>
         );
-      })}
+      })()}
+
+      {/* ── Error toast ─────────────────────────────────────────────────────────── */}
+      {dropError && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-3 bg-red-600 text-white text-sm font-semibold px-5 py-3 rounded-lg shadow-xl">
+          {dropError}
+          <button onClick={() => setDropError(null)} className="ml-2 opacity-70 hover:opacity-100">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+      )}
+
+      {/* ── Delete Confirmation Modal ────────────────────────────────────────── */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-[#091E427D] flex items-center justify-center z-[200] p-4">
+          <div className="bg-white rounded-[3px] w-full max-w-[420px] shadow-xl p-6">
+            <h3 className="text-[18px] font-semibold text-[#172B4D] mb-2">
+              Delete &ldquo;{deleteConfirm.column.name}&rdquo;?
+            </h3>
+            <p className="text-[14px] text-[#5E6C84] mb-4">
+              This column has{' '}
+              <strong>{issuesForColumn(deleteConfirm.column.id).length}</strong> issue
+              {issuesForColumn(deleteConfirm.column.id).length !== 1 ? 's' : ''}.
+              Choose what to do with them:
+            </p>
+
+            {/* Move to options */}
+            <div className="flex flex-col gap-2 mb-5">
+              <label className="flex items-start gap-3 p-3 border rounded-[3px] cursor-pointer hover:bg-[#FAFBFC] transition-colors">
+                <input
+                  type="radio"
+                  name="del-option"
+                  checked={deleteConfirm.moveToColumnId === null}
+                  onChange={() => setDeleteConfirm(prev => prev && { ...prev, moveToColumnId: null })}
+                  className="mt-0.5"
+                />
+                <div>
+                  <p className="text-[13px] font-semibold text-[#172B4D]">Leave unassigned</p>
+                  <p className="text-[11px] text-[#5E6C84]">Issues remain but won&apos;t appear on any column</p>
+                </div>
+              </label>
+              {columns.filter(c => c.id !== deleteConfirm.column.id).map(c => (
+                <label key={c.id} className="flex items-start gap-3 p-3 border rounded-[3px] cursor-pointer hover:bg-[#FAFBFC] transition-colors">
+                  <input
+                    type="radio"
+                    name="del-option"
+                    checked={deleteConfirm.moveToColumnId === c.id}
+                    onChange={() => setDeleteConfirm(prev => prev && { ...prev, moveToColumnId: c.id })}
+                    className="mt-0.5"
+                  />
+                  <div>
+                    <p className="text-[13px] font-semibold text-[#172B4D]">Move to &ldquo;{c.name}&rdquo;</p>
+                    <p className="text-[11px] text-[#5E6C84]">All issues will be moved to this column</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                disabled={deleteLoading}
+                className="px-4 py-2 text-[13px] font-medium text-[#42526E] hover:bg-[#EBECF0] rounded-[3px] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                disabled={deleteLoading}
+                className="px-4 py-2 text-[13px] font-bold text-white bg-red-600 hover:bg-red-700 disabled:opacity-60 rounded-[3px] transition-colors"
+              >
+                {deleteLoading ? 'Deleting…' : 'Delete Column'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -426,16 +947,17 @@ function IssueKanbanBoard({ issues, onOpenIssue, onAddIssue, onDropIssue, onDele
 function IssueTableView({ issues, onOpenIssue }: { issues: Issue[]; onOpenIssue: (id: string) => void }) {
   if (issues.length === 0) {
     return (
-      <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center text-slate-400 text-sm">
+      <div className="h-full min-h-0 bg-white rounded-2xl border border-slate-100 p-12 text-center text-slate-400 text-sm">
         No issues yet — create one from the sidebar.
       </div>
     );
   }
   return (
-    <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+    <div className="h-full min-h-0 bg-white rounded-2xl border border-slate-100 overflow-hidden flex flex-col">
+      <div className="h-full min-h-0 overflow-y-auto">
       <table className="w-full">
         <thead>
-          <tr className="border-b border-slate-100 bg-slate-50">
+          <tr className="border-b border-slate-100 bg-slate-50 sticky top-0 z-10">
             {['Type', 'Key', 'Title', 'Assignee', 'Priority', 'Status'].map((h) => (
               <th key={h} className="px-5 py-3.5 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">
                 {h}
@@ -491,6 +1013,7 @@ function IssueTableView({ issues, onOpenIssue }: { issues: Issue[]; onOpenIssue:
           })}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }
@@ -638,7 +1161,15 @@ export default function WsViewPage() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const projectId = params.projectId as string;
+  // Always ensure projectId is a string and not undefined/null
+  const projectIdRaw = params.projectId;
+  const projectId = typeof projectIdRaw === 'string' ? projectIdRaw : (projectIdRaw ? String(projectIdRaw) : '');
+  if (!projectId) {
+    if (process.env.NODE_ENV !== 'production') {
+      // eslint-disable-next-line no-console
+      console.warn('projectId is missing or invalid in ws-view/page.tsx');
+    }
+  }
 
   const { allIssues, flatIssues, loading, fetchIssueDetail, refresh } = useIssues();
   const { openCreateIssue } = useIssueModal();
@@ -648,14 +1179,19 @@ export default function WsViewPage() {
   const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
 
   // Optimistic status overrides for drag-drop — reverted on API failure
-  const [statusOverrides, setStatusOverrides] = useState<Record<string, IssueStatus>>({});
-  // Inline error toast (auto-dismisses after 4s)
+  // NOTE: Column-level optimistic updates are now managed inside IssueKanbanBoard.
+  //       This placeholder preserved for other views that may use status overrides.
   const [dropError, setDropError] = useState<string | null>(null);
 
   const [isTeamVisibilityOpen, setIsTeamVisibilityOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [showAddPeople, setShowAddPeople] = useState(false);
   const [projectRole, setProjectRole] = useState<string | null>(null);
+
+  // Kanban board filter — lifted from IssueKanbanBoard so it lives in the page filter bar
+  const [kanbanFilter, setKanbanFilter] = useState<KanbanFilter>('all');
+  const [showKanbanFilterMenu, setShowKanbanFilterMenu] = useState(false);
+  const kanbanFilterMenuRef = useRef<HTMLDivElement>(null);
 
   // Read ?tab= from URL, default to 'kanban'
   const tabParam = searchParams.get('tab') as ViewMode | null;
@@ -677,6 +1213,17 @@ export default function WsViewPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabParam]);
 
+  // Close kanban filter menu on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (kanbanFilterMenuRef.current && !kanbanFilterMenuRef.current.contains(e.target as Node)) {
+        setShowKanbanFilterMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
   const switchView = (v: ViewMode) => {
     setActiveView(v);
     const url = new URL(window.location.href);
@@ -689,21 +1236,14 @@ export default function WsViewPage() {
     fetchIssueDetail(issueId, projectId);
   };
 
-  const handleDropIssue = async (issueId: string, newStatus: IssueStatus) => {
-    const prevStatus = (allIssues.find(i => i.id === issueId)?.status) ?? newStatus;
-    // Optimistic update — move card immediately in the UI
-    setStatusOverrides(prev => ({ ...prev, [issueId]: newStatus }));
+  const handleDropIssue = async (issueId: string, columnId: string) => {
     try {
-      await issuesService.update(issueId, { status: newStatus, projectId });
-      // On success, clear override and let context reflect real state
-      setStatusOverrides(prev => { const n = { ...prev }; delete n[issueId]; return n; });
+      await issuesService.update(issueId, { columnId, projectId });
       refresh();
     } catch (err) {
-      // Rollback to previous status
-      setStatusOverrides(prev => ({ ...prev, [issueId]: prevStatus }));
-      setDropError('Failed to move issue. Please try again.');
-      setTimeout(() => setDropError(null), 4000);
-      console.error('Failed to update issue status on drop:', err);
+      // Optimistic state is already managed inside IssueKanbanBoard
+      console.error('Failed to move issue to column:', err);
+      throw err; // Re-throw so IssueKanbanBoard can rollback its own optimistic state
     }
   };
 
@@ -730,11 +1270,7 @@ export default function WsViewPage() {
 
   // Use allIssues for Kanban/Table/Progress (includes orphans fully)
   // flatIssues = tree-derived; allIssues = flat from /api/issues endpoint
-  // Apply optimistic status overrides from drag-drop before any filter
-  const issuesWithOverrides = (allIssues.length > 0 ? allIssues : flatIssues).map(i =>
-    statusOverrides[i.id] ? { ...i, status: statusOverrides[i.id] } : i
-  );
-  let displayIssues = issuesWithOverrides;
+  let displayIssues = allIssues.length > 0 ? allIssues : flatIssues;
 
   if (searchQuery.trim()) {
     const q = searchQuery.toLowerCase();
@@ -938,7 +1474,7 @@ export default function WsViewPage() {
         </div>
 
         {/* ── Main content ──────────────────────────────────────────────── */}
-        <main className="flex-1 overflow-auto pt-6 px-8 pb-8 flex flex-col">
+        <main className="flex-1 overflow-auto pt-4 px-5 pb-5 flex flex-col">
 
           {/* ── Error Toast (drag-drop / delete failures) ─────────────────── */}
           {dropError && (
@@ -1002,25 +1538,51 @@ export default function WsViewPage() {
               })}
             </div>
 
-            {/* Filter Button */}
-            <button
-              className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-md text-sm font-semibold shadow-sm transition-colors ${selectedAssignees.length > 0
-                ? 'border-blue-500 bg-blue-50 text-blue-700 hover:bg-blue-100'
-                : 'border-slate-300 text-slate-700 bg-slate-50 hover:bg-slate-100'
-                }`}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={selectedAssignees.length > 0 ? "text-blue-600" : "text-slate-500"}>
-                <line x1="4" y1="6" x2="20" y2="6" />
-                <line x1="6" y1="12" x2="18" y2="12" />
-                <line x1="10" y1="18" x2="14" y2="18" />
-              </svg>
-              Filter
-              {selectedAssignees.length > 0 && (
-                <span className="ml-0.5 bg-blue-200 text-blue-800 text-[10px] px-1.5 py-0.5 rounded-sm">
-                  {selectedAssignees.length}
-                </span>
-              )}
-            </button>
+            {/* Board filter — only visible on kanban view */}
+            {activeView === 'kanban' && (
+              <div ref={kanbanFilterMenuRef} className="relative">
+                <button
+                  onClick={() => setShowKanbanFilterMenu(v => !v)}
+                  title={
+                    kanbanFilter === 'recently_updated'
+                      ? 'Recently Updated'
+                      : kanbanFilter === 'assigned_to_me'
+                        ? 'Assigned to Me'
+                        : 'Board filter'
+                  }
+                  className={[
+                    'flex items-center justify-center w-9 h-9 border rounded-md shadow-sm transition-colors',
+                    kanbanFilter !== 'all'
+                      ? 'border-[#4C9AFF] bg-blue-50 text-[#0052CC] hover:bg-blue-100'
+                      : 'border-slate-300 text-slate-700 bg-slate-50 hover:bg-slate-100',
+                  ].join(' ')}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={kanbanFilter !== 'all' ? 'text-[#0052CC]' : 'text-slate-500'}>
+                    <line x1="4" y1="6" x2="20" y2="6" />
+                    <line x1="6" y1="12" x2="18" y2="12" />
+                    <line x1="10" y1="18" x2="14" y2="18" />
+                  </svg>
+                </button>
+
+                {showKanbanFilterMenu && (
+                  <div className="absolute right-0 top-full mt-1 w-52 bg-white border border-[#DFE1E6] rounded-[3px] shadow-[0_4px_12px_rgba(9,30,66,0.15)] z-[100] py-1">
+                    <p className="px-3 pt-2 pb-1 text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider">Board filter</p>
+                    {(['all', 'recently_updated', 'assigned_to_me'] as KanbanFilter[]).map(f => (
+                      <button
+                        key={f}
+                        onClick={() => { setKanbanFilter(f); setShowKanbanFilterMenu(false); }}
+                        className={[
+                          'w-full text-left px-3 py-2 text-[13px] transition-colors',
+                          kanbanFilter === f ? 'bg-[#DEEBFF] text-[#0052CC] font-semibold' : 'text-[#172B4D] hover:bg-[#FAFBFC]',
+                        ].join(' ')}
+                      >
+                        {f === 'all' ? 'All Issues' : f === 'recently_updated' ? 'Recently Updated' : 'Assigned to Me'}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {(searchQuery.trim() !== '' || selectedAssignees.length > 0) && (
               <>
@@ -1036,8 +1598,22 @@ export default function WsViewPage() {
           </div>
 
           {activeView === 'backlog' && <BacklogView />}
-          {activeView === 'kanban' && <IssueKanbanBoard issues={displayIssues} onOpenIssue={handleOpenIssue} onAddIssue={() => openCreateIssue('TASK')} onDropIssue={handleDropIssue} onDeleteIssue={handleDeleteIssue} />}
-          {activeView === 'table' && <IssueTableView issues={displayIssues} onOpenIssue={handleOpenIssue} />}
+          {activeView === 'kanban' && (
+            <IssueKanbanBoard
+              issues={displayIssues}
+              projectId={projectId}
+              onOpenIssue={handleOpenIssue}
+              onAddIssue={() => openCreateIssue('TASK')}
+              onDropIssue={handleDropIssue}
+              onDeleteIssue={handleDeleteIssue}
+              kanbanFilter={kanbanFilter}
+            />
+          )}
+          {activeView === 'table' && (
+            <div className="flex-1 min-h-0">
+              <IssueTableView issues={displayIssues} onOpenIssue={handleOpenIssue} />
+            </div>
+          )}
           {activeView === 'progress' && <IssueProgressView issues={displayIssues} members={members} onOpenIssue={handleOpenIssue} />}
         </main>
       </div>

@@ -25,6 +25,7 @@ const ISSUE_SELECT = {
   dueDate: true,
   createdAt: true,
   updatedAt: true,
+  columnId: true,                                               // Phase 3: dynamic Kanban column
   assignee: { select: { id: true, name: true, email: true } },
   reporter: { select: { id: true, name: true, email: true } },
 } as const;
@@ -57,6 +58,15 @@ const ISSUE_DETAIL_SELECT = {
     },
     orderBy: { createdAt: 'asc' as const },
   },
+} as const;
+
+const COMMENT_SELECT = {
+  id: true,
+  issueId: true,
+  userId: true,
+  content: true,
+  createdAt: true,
+  user: { select: { id: true, name: true, email: true } },
 } as const;
 
 @Injectable()
@@ -98,6 +108,7 @@ export class IssuesService {
   private async validateHierarchy(
     type: IssueType,
     parentId: string | undefined | null,
+    projectId?: string,
   ): Promise<void> {
     // EPIC can never have a parent
     if (type === IssueType.EPIC && parentId) {
@@ -109,11 +120,15 @@ export class IssuesService {
 
     const parent = await this.prisma.issue.findUnique({
       where: { id: parentId },
-      select: { type: true },
+      select: { type: true, projectId: true },
     });
 
     if (!parent) {
       throw new BadRequestException(`Parent issue not found: ${parentId}`);
+    }
+
+    if (projectId && parent.projectId !== projectId) {
+      throw new BadRequestException('Parent issue must belong to the same project');
     }
 
     if (type === IssueType.STORY && parent.type !== IssueType.EPIC) {
@@ -163,7 +178,7 @@ export class IssuesService {
     });
     if (!project) throw new NotFoundException(`Project not found: ${dto.projectId}`);
 
-    await this.validateHierarchy(dto.type, dto.parentId);
+    await this.validateHierarchy(dto.type, dto.parentId, project.id);
 
     // ── EPIC container rules ──────────────────────────────────────────────────
     if (dto.type === IssueType.EPIC) {
@@ -189,6 +204,18 @@ export class IssuesService {
         const count = await tx.issue.count({ where: { projectId: project.id } });
         const issueKey = `${project.projectID}-${count + 1}`;
 
+        // Phase 3: Auto-assign to first column if none specified and columns exist.
+        // This ensures new issues always appear on the Kanban board.
+        let resolvedColumnId = dto.columnId ?? null;
+        if (!resolvedColumnId) {
+          const firstCol = await tx.boardColumn.findFirst({
+            where: { projectId: project.id },
+            orderBy: { position: 'asc' },
+            select: { id: true },
+          });
+          resolvedColumnId = firstCol?.id ?? null;
+        }
+
         return tx.issue.create({
           data: {
             issueKey,
@@ -205,6 +232,7 @@ export class IssuesService {
               ? isNaN(Number(dto.estimate)) ? dto.estimate : `${dto.estimate}h`
               : null,
             dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
+            columnId: resolvedColumnId,
           },
           select: ISSUE_SELECT,
         });
@@ -242,13 +270,32 @@ export class IssuesService {
     });
   }
 
-  async findAll(projectId: string, type?: IssueType, assigneeId?: string, q?: string) {
+  /**
+   * Lists issues for a project with optional filters.
+   *
+   * filter values:
+   *  - 'recently_updated' → sort by updatedAt DESC (top 50 most recently changed)
+   *  - 'assigned_to_me'   → filter to issues where assigneeId = currentUserId
+   *   (caller must pass assigneeId = currentUserId)
+   */
+  async findAll(
+    projectId: string,
+    type?: IssueType,
+    assigneeId?: string,
+    q?: string,
+    filter?: string,
+  ) {
     // Resolve project UUID
     const project = await this.prisma.project.findFirst({
       where: { OR: [{ id: projectId }, { projectID: projectId }] },
       select: { id: true },
     });
     if (!project) throw new NotFoundException(`Project not found: ${projectId}`);
+
+    const orderBy =
+      filter === 'recently_updated'
+        ? [{ updatedAt: 'desc' as const }]
+        : [{ createdAt: 'asc' as const }];
 
     return this.prisma.issue.findMany({
       where: {
@@ -258,7 +305,7 @@ export class IssuesService {
         ...(q ? { title: { contains: q, mode: 'insensitive' } } : {}),
       },
       select: ISSUE_SELECT,
-      orderBy: { createdAt: 'asc' },
+      orderBy,
     });
   }
 
@@ -296,9 +343,23 @@ export class IssuesService {
     return allIssues.filter((issue) => issue.parentId === null);
   }
 
-  async findOne(id: string) {
-    const issue = await this.prisma.issue.findUnique({
-      where: { id },
+  async findOne(id: string, projectId?: string) {
+    let resolvedProjectId: string | undefined;
+
+    if (projectId) {
+      const project = await this.prisma.project.findFirst({
+        where: { OR: [{ id: projectId }, { projectID: projectId }] },
+        select: { id: true },
+      });
+      if (!project) throw new NotFoundException(`Project not found: ${projectId}`);
+      resolvedProjectId = project.id;
+    }
+
+    const issue = await this.prisma.issue.findFirst({
+      where: {
+        id,
+        ...(resolvedProjectId ? { projectId: resolvedProjectId } : {}),
+      },
       select: ISSUE_DETAIL_SELECT,
     });
     if (!issue) throw new NotFoundException(`Issue not found: ${id}`);
@@ -316,15 +377,14 @@ export class IssuesService {
     const effectiveType = dto.type ?? existing.type;
 
     // ── EPIC container rules on update ───────────────────────────────────────
-    // Never allow assigning status or assignee to an EPIC via normal update.
+    // Never allow changing status on an EPIC via normal update.
     if (effectiveType === IssueType.EPIC) {
-      if (dto.assigneeId !== undefined) dto.assigneeId = null;
       if (dto.status !== undefined) delete dto.status;
     }
 
     // Re-validate hierarchy only if parentId is being changed
     if (dto.parentId !== undefined && dto.parentId !== existing.parentId) {
-      await this.validateHierarchy(effectiveType, dto.parentId);
+      await this.validateHierarchy(effectiveType, dto.parentId, existing.projectId);
       // Circular reference check (only when setting a non-null parent)
       if (dto.parentId) {
         await this.detectCircularParent(id, dto.parentId);
@@ -347,6 +407,21 @@ export class IssuesService {
       }
     }
 
+    if (dto.reporterId !== undefined && dto.reporterId !== null && dto.projectId) {
+      const proj = await this.prisma.project.findFirst({
+        where: { OR: [{ id: dto.projectId }, { projectID: dto.projectId }] },
+        select: { id: true },
+      });
+      if (proj) {
+        const membership = await this.prisma.userRole.findFirst({
+          where: { userId: dto.reporterId, projectId: proj.id },
+        });
+        if (!membership) {
+          throw new BadRequestException('Reporter must be a member of this project');
+        }
+      }
+    }
+
     return this.prisma.issue.update({
       where: { id },
       data: {
@@ -358,10 +433,61 @@ export class IssuesService {
         // Allow explicitly setting parentId to null (un-parent an issue)
         ...(dto.parentId !== undefined && { parentId: dto.parentId ?? null }),
         ...(dto.assigneeId !== undefined && { assigneeId: dto.assigneeId }),
+        ...(dto.reporterId !== undefined && { reporterId: dto.reporterId }),
         ...(dto.estimate !== undefined && { estimate: dto.estimate ? (isNaN(Number(dto.estimate)) ? dto.estimate : `${dto.estimate}h`) : null }),
         ...(dto.dueDate !== undefined && { dueDate: dto.dueDate ? new Date(dto.dueDate) : null }),
+        // Phase 3: update column assignment (null = backlog/unassigned)
+        ...(dto.columnId !== undefined && { columnId: dto.columnId ?? null }),
       },
       select: ISSUE_DETAIL_SELECT,
+    });
+  }
+
+  async getComments(issueId: string, projectId: string) {
+    const project = await this.prisma.project.findFirst({
+      where: { OR: [{ id: projectId }, { projectID: projectId }] },
+      select: { id: true },
+    });
+    if (!project) throw new NotFoundException(`Project not found: ${projectId}`);
+
+    const issue = await this.prisma.issue.findFirst({
+      where: { id: issueId, projectId: project.id },
+      select: { id: true },
+    });
+    if (!issue) throw new NotFoundException(`Issue not found: ${issueId}`);
+
+    return this.prisma.comment.findMany({
+      where: { issueId: issue.id },
+      select: COMMENT_SELECT,
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async createComment(issueId: string, projectId: string, userId: string, content: string) {
+    const project = await this.prisma.project.findFirst({
+      where: { OR: [{ id: projectId }, { projectID: projectId }] },
+      select: { id: true },
+    });
+    if (!project) throw new NotFoundException(`Project not found: ${projectId}`);
+
+    const issue = await this.prisma.issue.findFirst({
+      where: { id: issueId, projectId: project.id },
+      select: { id: true },
+    });
+    if (!issue) throw new NotFoundException(`Issue not found: ${issueId}`);
+
+    const trimmed = content.trim();
+    if (!trimmed) {
+      throw new BadRequestException('Comment content cannot be empty');
+    }
+
+    return this.prisma.comment.create({
+      data: {
+        issueId: issue.id,
+        userId,
+        content: trimmed,
+      },
+      select: COMMENT_SELECT,
     });
   }
 
@@ -390,20 +516,39 @@ export class IssuesService {
    * Returns flat issues excluding EPIC — Task, Bug, Story only.
    * Includes parentId for accordion grouping on the client.
    */
-  async getKanban(projectId: string) {
+  /**
+   * GET /issues/kanban?projectId=<id>&filter=recently_updated|assigned_to_me&currentUserId=<id>
+   * Returns STORY / TASK / BUG issues (excludes EPIC) for the Kanban board.
+   * Includes columnId so the frontend can group by column dynamically.
+   *
+   * filter='recently_updated'  → top 100 issues sorted by updatedAt DESC
+   * filter='assigned_to_me'    → only issues where assigneeId = currentUserId
+   */
+  async getKanban(projectId: string, filter?: string, currentUserId?: string) {
     const project = await this.prisma.project.findFirst({
       where: { OR: [{ id: projectId }, { projectID: projectId }] },
       select: { id: true },
     });
     if (!project) throw new NotFoundException(`Project not found: ${projectId}`);
 
+    const where: Record<string, any> = {
+      projectId: project.id,
+      type: { not: IssueType.EPIC }, // Kanban shows only Task / Bug / Story
+    };
+
+    if (filter === 'assigned_to_me' && currentUserId) {
+      where.assigneeId = currentUserId;
+    }
+
+    const orderBy =
+      filter === 'recently_updated'
+        ? { updatedAt: 'desc' as const }
+        : { createdAt: 'asc' as const };
+
     return this.prisma.issue.findMany({
-      where: {
-        projectId: project.id,
-        type: { not: IssueType.EPIC }, // Kanban shows only Task / Bug / Story
-      },
+      where,
       select: ISSUE_SELECT,
-      orderBy: { createdAt: 'asc' },
+      orderBy,
     });
   }
 

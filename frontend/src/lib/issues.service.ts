@@ -1,10 +1,12 @@
 import { api } from './api';
 import type {
   Issue,
+  IssueComment,
   IssueDetail,
   IssueTree,
   IssueType,
   IssueLink,
+  CreateIssueCommentPayload,
   CreateIssuePayload,
   UpdateIssuePayload,
   CreateIssueLinkPayload,
@@ -26,10 +28,13 @@ export const issuesService = {
 
   /**
    * Get only Task / Bug / Story issues (no EPICs) — for the Kanban board.
-   * Server-side filtering is more efficient than client-side type exclusion.
+   * Supports filter: 'recently_updated' | 'assigned_to_me'
    */
-  getKanban: (projectId: string): Promise<Issue[]> =>
-    api.get<Issue[]>(`/issues/kanban?projectId=${encodeURIComponent(projectId)}`),
+  getKanban: (projectId: string, filter?: string): Promise<Issue[]> => {
+    const params = new URLSearchParams({ projectId });
+    if (filter) params.set('filter', filter);
+    return api.get<Issue[]>(`/issues/kanban?${params.toString()}`);
+  },
 
   /** Get nested tree for a project — root items have parentId===null (any type) */
   getTree: (projectId: string): Promise<IssueTree[]> =>
@@ -57,6 +62,14 @@ export const issuesService = {
   /** Delete an issue — projectId sent as query param for PermissionGuard */
   delete: (id: string, projectId: string): Promise<{ deleted: boolean; id: string }> =>
     api.delete<{ deleted: boolean; id: string }>(`/issues/${id}`, { projectId }),
+
+  /** Get comments for an issue */
+  getComments: (id: string, projectId: string): Promise<IssueComment[]> =>
+    api.get<IssueComment[]>(`/issues/${id}/comments?projectId=${encodeURIComponent(projectId)}`),
+
+  /** Add a comment to an issue */
+  addComment: (id: string, data: CreateIssueCommentPayload): Promise<IssueComment> =>
+    api.post<IssueComment>(`/issues/${id}/comments`, data),
 
   /** Link two issues (BLOCKS, DEPENDS_ON, RELATES_TO, DUPLICATES) */
   addLink: (data: CreateIssueLinkPayload): Promise<IssueLink> =>

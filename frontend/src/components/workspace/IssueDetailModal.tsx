@@ -12,6 +12,7 @@ import { useIssues } from '@/lib/IssuesContext';
 import { issuesService } from '@/lib/issues.service';
 import { projectsService } from '@/lib/projects.service';
 import type {
+  IssueComment,
   IssueDetail,
   IssueType,
   IssueStatus,
@@ -77,6 +78,21 @@ function getInitials(name: string): string {
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function toDateInputValue(iso: string | null): string {
+  if (!iso) return '';
+  return new Date(iso).toISOString().slice(0, 10);
 }
 
 interface Member { userId: string; name: string; email: string; roleName: string; }
@@ -185,6 +201,354 @@ function StatusDropdown({
         </div>
       )}
     </div>
+  );
+}
+
+function InlineMemberSelect({
+  value,
+  members,
+  placeholder,
+  onChange,
+  saving,
+  emptyLabel,
+}: {
+  value: Member | null;
+  members: Member[];
+  placeholder: string;
+  onChange: (userId: string | null) => Promise<void>;
+  saving?: boolean;
+  emptyLabel: string;
+}) {
+  const [editing, setEditing] = useState(false);
+
+  const handleChange = async (nextValue: string) => {
+    try {
+      await onChange(nextValue || null);
+      setEditing(false);
+    } catch {
+      // parent error state handles messaging
+    }
+  };
+
+  if (editing) {
+    return (
+      <select
+        autoFocus
+        defaultValue={value?.userId ?? ''}
+        onBlur={() => setEditing(false)}
+        onChange={(e) => { void handleChange(e.target.value); }}
+        disabled={saving}
+        className="w-full h-9 rounded-[3px] border border-[#4C9AFF] bg-white px-2 text-[13px] text-[#172B4D] outline-none"
+      >
+        <option value="">{emptyLabel}</option>
+        {members.map((member) => (
+          <option key={member.userId} value={member.userId}>{member.name}</option>
+        ))}
+      </select>
+    );
+  }
+
+  return (
+    <button
+      onClick={() => setEditing(true)}
+      disabled={saving}
+      className="flex h-9 w-full items-center gap-2 rounded-[3px] px-1.5 text-left text-[#42526E] transition-colors hover:bg-slate-100 disabled:opacity-60"
+      title={`Click to edit ${placeholder.toLowerCase()}`}
+    >
+      {value ? (
+        <>
+          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#FF5630] text-[9px] font-bold text-white">
+            {getInitials(value.name)}
+          </div>
+          <span className="truncate font-medium">{value.name}</span>
+        </>
+      ) : (
+        <>
+          <div className="flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 bg-slate-100 text-[#A5ADBA]">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+          </div>
+          <span className="font-medium text-[#6B778C]">{emptyLabel}</span>
+        </>
+      )}
+    </button>
+  );
+}
+
+function InlinePrioritySelect({
+  value,
+  onChange,
+  saving,
+}: {
+  value: IssuePriority;
+  onChange: (priority: IssuePriority) => Promise<void>;
+  saving?: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+
+  const handleChange = async (nextValue: string) => {
+    try {
+      await onChange(nextValue as IssuePriority);
+      setEditing(false);
+    } catch {
+      // parent error state handles messaging
+    }
+  };
+
+  if (editing) {
+    return (
+      <select
+        autoFocus
+        defaultValue={value}
+        onBlur={() => setEditing(false)}
+        onChange={(e) => { void handleChange(e.target.value); }}
+        disabled={saving}
+        className="w-full h-9 rounded-[3px] border border-[#4C9AFF] bg-white px-2 text-[13px] text-[#172B4D] outline-none"
+      >
+        {(['LOW', 'MEDIUM', 'HIGH'] as IssuePriority[]).map((priority) => (
+          <option key={priority} value={priority}>{PRIORITY_CONFIG[priority].label}</option>
+        ))}
+      </select>
+    );
+  }
+
+  return (
+    <button
+      onClick={() => setEditing(true)}
+      disabled={saving}
+      className="flex h-9 w-full items-center gap-2 rounded-[3px] px-1.5 text-left text-[#42526E] transition-colors hover:bg-slate-100 disabled:opacity-60"
+      title="Click to edit priority"
+    >
+      <span className={`h-2 w-2 rounded-[2px] ${PRIORITY_CONFIG[value].dot}`} />
+      <span className="font-medium">{PRIORITY_CONFIG[value].label}</span>
+    </button>
+  );
+}
+
+function InlineTextValueField({
+  value,
+  placeholder,
+  onSave,
+  saving,
+}: {
+  value: string | null;
+  placeholder: string;
+  onSave: (nextValue: string | null) => Promise<void>;
+  saving?: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value ?? '');
+
+  useEffect(() => {
+    setDraft(value ?? '');
+  }, [value]);
+
+  const commit = async () => {
+    const nextValue = draft.trim() || null;
+    if (nextValue === (value ?? null)) {
+      setEditing(false);
+      return;
+    }
+
+    try {
+      await onSave(nextValue);
+      setEditing(false);
+    } catch {
+      // parent error state handles messaging
+    }
+  };
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => { void commit(); }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') void commit();
+          if (e.key === 'Escape') {
+            setDraft(value ?? '');
+            setEditing(false);
+          }
+        }}
+        disabled={saving}
+        className="h-9 w-full rounded-[3px] border border-[#4C9AFF] bg-white px-2 text-[13px] text-[#172B4D] outline-none"
+      />
+    );
+  }
+
+  return (
+    <button
+      onClick={() => setEditing(true)}
+      disabled={saving}
+      className="h-9 w-full rounded-[3px] px-1.5 text-left text-[#172B4D] transition-colors hover:bg-slate-100 disabled:opacity-60"
+      title="Click to edit"
+    >
+      {value ? <span className="font-medium">{value}</span> : <span className="text-[#6B778C]">{placeholder}</span>}
+    </button>
+  );
+}
+
+function InlineDateField({
+  value,
+  onSave,
+  saving,
+}: {
+  value: string | null;
+  onSave: (nextValue: string | null) => Promise<void>;
+  saving?: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(toDateInputValue(value));
+
+  useEffect(() => {
+    setDraft(toDateInputValue(value));
+  }, [value]);
+
+  const commit = async (nextValue: string) => {
+    if (nextValue === toDateInputValue(value)) {
+      setEditing(false);
+      return;
+    }
+
+    try {
+      await onSave(nextValue || null);
+      setEditing(false);
+    } catch {
+      // parent error state handles messaging
+    }
+  };
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-2">
+        <input
+          autoFocus
+          type="date"
+          value={draft}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            void commit(e.target.value);
+          }}
+          onBlur={() => setEditing(false)}
+          disabled={saving}
+          className="h-9 w-full rounded-[3px] border border-[#4C9AFF] bg-white px-2 text-[13px] text-[#172B4D] outline-none"
+        />
+        {value && (
+          <button
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => { void commit(''); }}
+            className="text-[12px] font-semibold text-[#0052CC] hover:underline"
+          >
+            Clear
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <button
+      onClick={() => setEditing(true)}
+      disabled={saving}
+      className="flex h-9 w-full items-center gap-2 rounded-[3px] px-1.5 text-left text-[#172B4D] transition-colors hover:bg-slate-100 disabled:opacity-60"
+      title="Click to edit due date"
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      {value ? <span className="font-medium">{formatDate(value)}</span> : <span className="text-[#6B778C]">Add due date</span>}
+    </button>
+  );
+}
+
+function InlineParentSelect({
+  value,
+  candidates,
+  saving,
+  disabled,
+  onChange,
+}: {
+  value: Issue | null;
+  candidates: Issue[];
+  saving?: boolean;
+  disabled?: boolean;
+  onChange: (parentId: string | null) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [query, setQuery] = useState('');
+
+  const filteredCandidates = candidates.filter((candidate) => {
+    const haystack = `${candidate.issueKey} ${candidate.title}`.toLowerCase();
+    return haystack.includes(query.trim().toLowerCase());
+  });
+
+  const selectParent = async (parentId: string | null) => {
+    try {
+      await onChange(parentId);
+      setEditing(false);
+      setQuery('');
+    } catch {
+      // parent error state handles messaging
+    }
+  };
+
+  if (disabled) {
+    return <span className="px-1 text-[#6B778C]">Not applicable</span>;
+  }
+
+  if (editing) {
+    return (
+      <div className="space-y-2">
+        <input
+          autoFocus
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onBlur={() => setTimeout(() => setEditing(false), 120)}
+          onKeyDown={(e) => { if (e.key === 'Escape') setEditing(false); }}
+          placeholder="Search parent issue..."
+          disabled={saving}
+          className="h-9 w-full rounded-[3px] border border-[#4C9AFF] bg-white px-2 text-[13px] text-[#172B4D] outline-none"
+        />
+        <div className="max-h-44 overflow-y-auto rounded-[3px] border border-[#DFE1E6] bg-white">
+          <button
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => { void selectParent(null); }}
+            className="w-full px-3 py-2 text-left text-[13px] text-[#42526E] transition-colors hover:bg-slate-50"
+          >
+            None
+          </button>
+          {filteredCandidates.slice(0, 8).map((candidate) => (
+            <button
+              key={candidate.id}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => { void selectParent(candidate.id); }}
+              className="w-full px-3 py-2 text-left text-[13px] text-[#172B4D] transition-colors hover:bg-slate-50"
+            >
+              <span className="font-medium text-[#0052CC]">{candidate.issueKey}</span>
+              <span className="mx-1 text-[#A5ADBA]">·</span>
+              <span>{candidate.title}</span>
+            </button>
+          ))}
+          {filteredCandidates.length === 0 && (
+            <div className="px-3 py-2 text-[13px] text-[#6B778C]">No matching issues</div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      onClick={() => setEditing(true)}
+      disabled={saving}
+      className="h-9 w-full rounded-[3px] px-1.5 text-left text-[#172B4D] transition-colors hover:bg-slate-100 disabled:opacity-60"
+      title="Click to edit parent"
+    >
+      {value ? (
+        <span className="font-medium text-[#0052CC]">{value.issueKey} <span className="text-[#172B4D]">· {value.title}</span></span>
+      ) : (
+        <span className="text-[#6B778C]">None</span>
+      )}
+    </button>
   );
 }
 
@@ -330,6 +694,11 @@ export default function IssueDetailModal({ projectId }: { projectId: string }) {
   const [members, setMembers] = useState<Member[]>([]);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [comments, setComments] = useState<IssueComment[]>([]);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [commentSaving, setCommentSaving] = useState(false);
+  const [commentDraft, setCommentDraft] = useState('');
+  const [commentError, setCommentError] = useState<string | null>(null);
 
   // Link form state
   const [linkType, setLinkType] = useState<IssueLinkType>('RELATES_TO');
@@ -359,6 +728,35 @@ export default function IssueDetailModal({ projectId }: { projectId: string }) {
     setIssue(selectedIssue);
     setSaveError(null);
   }, [selectedIssue]);
+
+  useEffect(() => {
+    if (!issue || !projectId) {
+      setComments([]);
+      return;
+    }
+
+    let cancelled = false;
+    setCommentsLoading(true);
+    setCommentError(null);
+
+    issuesService.getComments(issue.id, projectId)
+      .then((data) => {
+        if (!cancelled) setComments(data);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setComments([]);
+          setCommentError(error instanceof Error ? error.message : 'Failed to load comments');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setCommentsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [issue, projectId]);
 
   // Fetch members for assignee dropdown
   useEffect(() => {
@@ -473,6 +871,25 @@ export default function IssueDetailModal({ projectId }: { projectId: string }) {
     await fetchIssueDetail(childId, projectId);
   }, [fetchIssueDetail, projectId]);
 
+  const handleAddComment = useCallback(async () => {
+    if (!issue || !commentDraft.trim()) return;
+
+    setCommentSaving(true);
+    setCommentError(null);
+    try {
+      const created = await issuesService.addComment(issue.id, {
+        projectId,
+        content: commentDraft,
+      });
+      setComments((prev) => [created, ...prev]);
+      setCommentDraft('');
+    } catch (error) {
+      setCommentError(error instanceof Error ? error.message : 'Failed to add comment');
+    } finally {
+      setCommentSaving(false);
+    }
+  }, [issue, projectId, commentDraft]);
+
   if (!mounted || !issue) return null;
 
   const typeStyle = TYPE_STYLES[issue.type];
@@ -485,6 +902,12 @@ export default function IssueDetailModal({ projectId }: { projectId: string }) {
     if (issue.type === 'TASK' || issue.type === 'BUG') return i.type === 'STORY' || i.type === 'EPIC';
     return false; // EPIC can't have parent
   });
+
+  const selectedAssignee = members.find((member) => member.userId === issue.assigneeId)
+    ?? (issue.assignee ? { userId: issue.assignee.id, name: issue.assignee.name, email: issue.assignee.email, roleName: '' } : null);
+
+  const selectedReporter = members.find((member) => member.userId === issue.reporterId)
+    ?? (issue.reporter ? { userId: issue.reporter.id, name: issue.reporter.name, email: issue.reporter.email, roleName: '' } : null);
 
   const modal = (
     <div
@@ -761,6 +1184,64 @@ export default function IssueDetailModal({ projectId }: { projectId: string }) {
               </div>
             </div>
 
+            {/* Comments */}
+            <div className="mb-8">
+              <div className="mb-3 flex items-center justify-between text-[#172B4D] font-semibold">
+                <h3 className="text-[15px]">Comments</h3>
+                {commentsLoading && <span className="text-[12px] font-medium text-[#6B778C]">Loading...</span>}
+              </div>
+
+              <div className="rounded-[6px] border border-[#DFE1E6] bg-white p-3">
+                <textarea
+                  value={commentDraft}
+                  onChange={(e) => setCommentDraft(e.target.value)}
+                  rows={3}
+                  maxLength={5000}
+                  placeholder="Add a comment..."
+                  className="w-full resize-y rounded-[3px] border border-[#DFE1E6] px-3 py-2 text-[13px] text-[#172B4D] outline-none focus:border-[#4C9AFF]"
+                />
+                <div className="mt-3 flex items-center justify-between gap-3">
+                  <span className="text-[12px] text-[#6B778C]">Comments are saved to the backend after successful API response.</span>
+                  <button
+                    onClick={() => { void handleAddComment(); }}
+                    disabled={commentSaving || !commentDraft.trim()}
+                    className="rounded-[3px] bg-[#0052CC] px-3 py-1.5 text-[13px] font-semibold text-white transition-colors hover:bg-[#0047B3] disabled:opacity-50"
+                  >
+                    {commentSaving ? 'Adding...' : 'Add comment'}
+                  </button>
+                </div>
+                {commentError && (
+                  <p className="mt-3 rounded-[3px] border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-700">{commentError}</p>
+                )}
+              </div>
+
+              <div className="mt-4 space-y-3">
+                {!commentsLoading && comments.length === 0 && (
+                  <div className="rounded-[6px] border border-dashed border-[#DFE1E6] bg-[#FAFBFC] px-4 py-5 text-[13px] text-[#6B778C]">
+                    No comments yet.
+                  </div>
+                )}
+
+                {comments.map((comment) => (
+                  <div key={comment.id} className="rounded-[6px] border border-[#DFE1E6] bg-white px-4 py-3">
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#FF5630] text-[10px] font-bold text-white">
+                          {getInitials(comment.user.name)}
+                        </div>
+                        <div>
+                          <p className="text-[13px] font-semibold text-[#172B4D]">{comment.user.name}</p>
+                          <p className="text-[11px] text-[#6B778C]">{comment.user.email}</p>
+                        </div>
+                      </div>
+                      <span className="text-[11px] text-[#6B778C]">{formatDateTime(comment.createdAt)}</span>
+                    </div>
+                    <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-[#172B4D]">{comment.content}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
 
           </div>
 
@@ -785,81 +1266,70 @@ export default function IssueDetailModal({ projectId }: { projectId: string }) {
                  {/* ── Assign To ── */}
                  <div className="grid grid-cols-[110px_1fr] items-center gap-3">
                    <div className="text-[#6B778C] font-semibold hover:text-[#172B4D] cursor-pointer">Assign To</div>
-                   <div className="flex flex-col items-start gap-1">
-                     <button className="flex items-center gap-2 text-[#42526E] font-medium hover:bg-slate-100 rounded px-1 -ml-1 transition-colors group h-8">
-                       {issue.assignee ? (
-                          <>
-                           <div className="w-6 h-6 rounded-full bg-[#FF5630] flex items-center justify-center text-white text-[9px] font-bold">{getInitials(issue.assignee.name)}</div>
-                           <span>{issue.assignee.name}</span>
-                          </>
-                       ) : (
-                          <>
-                           <div className="w-6 h-6 rounded-full bg-slate-100 border border-slate-300 flex items-center justify-center text-[#A5ADBA]"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></div>
-                           <span>Unassigned</span>
-                          </>
-                       )}
-                     </button>
-                     {!issue.assignee && <span className="text-[#0052CC] font-medium cursor-pointer hover:underline text-[13px]">Assign to me</span>}
-                   </div>
+                   <InlineMemberSelect
+                     value={selectedAssignee}
+                     members={members}
+                     placeholder="Assign To"
+                     emptyLabel="Unassigned"
+                     saving={saving}
+                     onChange={(assigneeId) => save({ assigneeId })}
+                   />
                  </div>
 
                  {/* ── Reporter ── */}
                  <div className="grid grid-cols-[110px_1fr] items-center gap-3">
                    <div className="text-[#6B778C] font-semibold hover:text-[#172B4D] cursor-pointer">Reporter</div>
-                   <div className="flex items-center gap-2 font-medium text-[#42526E]">
-                     {issue.reporter ? (
-                        <>
-                          <div className="w-6 h-6 rounded-full bg-[#FF5630] flex items-center justify-center text-white text-[9px] font-bold">{getInitials(issue.reporter.name)}</div>
-                          <span>{issue.reporter.name}</span>
-                        </>
-                     ) : (
-                        <>
-           <div className="w-6 h-6 rounded-full bg-slate-100 border border-slate-300 flex items-center justify-center text-[#A5ADBA]">
-             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-               <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-             </svg>
-           </div>
-                        </>
-                     )}
-                   </div>
+                   <InlineMemberSelect
+                     value={selectedReporter}
+                     members={members}
+                     placeholder="Reporter"
+                     emptyLabel="No reporter"
+                     saving={saving}
+                     onChange={(reporterId) => save({ reporterId })}
+                   />
                  </div>
 
                  {/* ── Priority ── */}
                  <div className="grid grid-cols-[110px_1fr] items-center gap-3 min-h-[32px]">
                    <div className="text-[#6B778C] font-semibold hover:text-[#172B4D] cursor-pointer">Priority</div>
-                   <button className="text-[#42526E] hover:bg-slate-100 rounded px-2 py-1 -ml-2 transition-colors text-left flex items-center gap-2">
-                     <span className={`w-2 h-2 rounded-[2px] ${PRIORITY_CONFIG[issue.priority]?.dot}`} /> {issue.priority === 'MEDIUM' ? 'None' : PRIORITY_CONFIG[issue.priority]?.label}
-                   </button>
+                   <InlinePrioritySelect
+                     value={issue.priority}
+                     saving={saving}
+                     onChange={(priority) => save({ priority })}
+                   />
                  </div>
 
                  {/* ── Parent ── */}
                  <div className="grid grid-cols-[110px_1fr] items-center gap-3 min-h-[32px]">
                    <div className="text-[#6B778C] font-semibold hover:text-[#172B4D] cursor-pointer">Parent</div>
-                   {issue.parent ? (
-                     <button
-                       onClick={() => fetchIssueDetail(issue.parent!.id, projectId)}
-                       className="text-[#0052CC] font-medium cursor-pointer hover:underline text-left"
-                     >
-                       {issue.parent.issueKey}
-                     </button>
-                   ) : (
-                     <span className="text-[#172B4D] px-1">None</span>
-                   )}
+                   <InlineParentSelect
+                     value={issue.parent}
+                     candidates={parentCandidates}
+                     saving={saving}
+                     disabled={issue.type === 'EPIC'}
+                     onChange={(parentId) => save({ parentId })}
+                   />
                  </div>
 
                  {/* ── Estimate ── */}
                  <div className="grid grid-cols-[110px_1fr] gap-3 min-h-[32px]">
                    <div className="text-[#6B778C] font-semibold hover:text-[#172B4D] cursor-pointer pt-1 line-clamp-2">Estimate</div>
-                   <span className="text-[#172B4D] px-1 pt-1">None</span>
+                   <InlineTextValueField
+                     value={issue.estimate}
+                     placeholder="None"
+                     saving={saving}
+                     onSave={(estimate) => save({ estimate })}
+                   />
                  </div>
 
                  {/* ── Due date ── */}
                  <div className="grid grid-cols-[110px_1fr] items-center gap-3 min-h-[32px]">
                    <div className="text-[#6B778C] font-semibold hover:text-[#172B4D] cursor-pointer">Due date</div>
-                   <button className="border border-[#DFE1E6] rounded-[3px] bg-white hover:bg-[#F4F5F7] flex items-center gap-2 px-2 py-1 text-[13px] text-[#172B4D] transition-colors">
-                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                     Apr 4, 2026
-                   </button>
+                   <InlineDateField
+                     value={issue.dueDate}
+                     saving={saving}
+                     onSave={(dueDate) => save({ dueDate })}
+                   />
                  </div>
 
                  {/* ── Created ── */}

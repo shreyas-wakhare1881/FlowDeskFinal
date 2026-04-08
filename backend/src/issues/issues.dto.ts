@@ -4,19 +4,21 @@ import {
   IsEnum,
   IsUUID,
   IsDateString,
+  IsNotEmpty,
+  MaxLength,
 } from 'class-validator';
 
 import { IssueType, IssueStatus, IssuePriority } from '@prisma/client';
 
 export class CreateIssueDto {
   @IsString()
-  projectId: string;
+  projectId!: string;
 
   @IsEnum(IssueType)
-  type: IssueType;
+  type!: IssueType;
 
   @IsString()
-  title: string;
+  title!: string;
 
   @IsOptional()
   @IsString()
@@ -53,6 +55,10 @@ export class CreateIssueDto {
   @IsOptional()
   @IsDateString()
   dueDate?: string | null;
+
+  @IsOptional()
+  @IsString()
+  columnId?: string | null;
 }
 
 export class UpdateIssueDto {
@@ -60,7 +66,7 @@ export class UpdateIssueDto {
    * projectId MUST be passed on updates so PermissionGuard can resolve project context.
    */
   @IsString()
-  projectId: string;
+  projectId!: string;
 
   @IsOptional()
   @IsString()
@@ -94,10 +100,28 @@ export class UpdateIssueDto {
   assigneeId?: string | null;
 
   @IsOptional()
+  @IsUUID()
+  reporterId?: string | null;
+
+  @IsOptional()
   @IsString()
   estimate?: string | null;
 
   @IsOptional()
   @IsDateString()
   dueDate?: string | null;
+
+  @IsOptional()
+  @IsString()
+  columnId?: string | null;
+}
+
+export class CreateIssueCommentDto {
+  @IsString()
+  projectId!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(5000)
+  content!: string;
 }

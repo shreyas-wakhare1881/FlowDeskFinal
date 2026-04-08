@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { IssueType } from '@prisma/client';
 import { IssuesService } from './issues.service';
-import { CreateIssueDto, UpdateIssueDto } from './issues.dto';
+import { CreateIssueCommentDto, CreateIssueDto, UpdateIssueDto } from './issues.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PermissionGuard } from '../auth/guards/permission.guard';
 import { RequirePermission } from '../auth/decorators/require-permission.decorator';
@@ -32,13 +32,18 @@ export class IssuesController {
     return this.issuesService.getTree(projectId);
   }
 
-  // GET /api/issues/kanban?projectId=<id>
+  // GET /api/issues/kanban?projectId=<id>&filter=recently_updated|assigned_to_me
   // Returns ONLY Task / Bug / Story — excludes EPIC — for the Kanban board view.
   @Get('kanban')
   @UseGuards(PermissionGuard)
   @RequirePermission('READ_ISSUE')
-  getKanban(@Query('projectId') projectId: string) {
-    return this.issuesService.getKanban(projectId);
+  getKanban(
+    @Query('projectId') projectId: string,
+    @Query('filter') filter?: string,
+    @Req() req?: any,
+  ) {
+    const currentUserId = req?.user?.userId as string | undefined;
+    return this.issuesService.getKanban(projectId, filter, currentUserId);
   }
 
   // GET /api/issues/search?q=<query>&projectId=<id>
@@ -65,7 +70,7 @@ export class IssuesController {
     return this.issuesService.create(dto);
   }
 
-  // GET /api/issues?projectId=<id>&type=EPIC&assigneeId=<uuid>&q=search
+  // GET /api/issues?projectId=<id>&type=EPIC&assigneeId=<uuid>&q=search&filter=recently_updated
   @Get()
   @UseGuards(PermissionGuard)
   @RequirePermission('READ_ISSUE')
@@ -74,8 +79,23 @@ export class IssuesController {
     @Query('type') type?: IssueType,
     @Query('assigneeId') assigneeId?: string,
     @Query('q') q?: string,
+    @Query('filter') filter?: string,
   ) {
-    return this.issuesService.findAll(projectId, type, assigneeId, q);
+    return this.issuesService.findAll(projectId, type, assigneeId, q, filter);
+  }
+
+  @Get(':id/comments')
+  @UseGuards(PermissionGuard)
+  @RequirePermission('VIEW_COMMENT')
+  getComments(@Param('id') id: string, @Query('projectId') projectId: string) {
+    return this.issuesService.getComments(id, projectId);
+  }
+
+  @Post(':id/comments')
+  @UseGuards(PermissionGuard)
+  @RequirePermission('ADD_COMMENT')
+  addComment(@Param('id') id: string, @Body() dto: CreateIssueCommentDto, @Req() req: any) {
+    return this.issuesService.createComment(id, dto.projectId, req.user.userId, dto.content);
   }
 
   // GET /api/issues/:id
@@ -83,7 +103,7 @@ export class IssuesController {
   @UseGuards(PermissionGuard)
   @RequirePermission('READ_ISSUE')
   findOne(@Param('id') id: string, @Query('projectId') projectId: string) {
-    return this.issuesService.findOne(id);
+    return this.issuesService.findOne(id, projectId);
   }
 
   // PATCH /api/issues/:id  — projectId in body (required by PermissionGuard)

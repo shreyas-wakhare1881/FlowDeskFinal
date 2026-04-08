@@ -32,6 +32,7 @@ model User {
   // ── Issues relations (Phase 2) ────────────────────────────────────
   assignedIssues    Issue[]     @relation("IssueAssignee")
   reportedIssues    Issue[]     @relation("IssueReporter")
+  comments          Comment[]
 
   @@index([email])
   @@map("users")
@@ -86,6 +87,7 @@ model Project {
   tasks               Task[]
   issues              Issue[]
   userRoles           UserRole[]   // members + their roles in this project
+  boardColumns        BoardColumn[]  // dynamic Kanban columns (Phase 3)
   
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
@@ -388,6 +390,7 @@ model Issue {
   // Issue links (BLOCKS, DEPENDS_ON, RELATES_TO, DUPLICATES)
   sourceLinks IssueLink[]   @relation("SourceIssue")
   targetLinks IssueLink[]   @relation("TargetIssue")
+  comments    Comment[]
 
   // Project ownership
   projectId   String
@@ -406,12 +409,48 @@ model Issue {
   estimate    String?       // e.g. "4h", "2d", "4"
   dueDate     DateTime?
 
+  // ── Board Column (Phase 3: Dynamic Kanban) ──────────────────────────────
+  // columnId is the PRIMARY display driver for Kanban.
+  // NULL = unassigned; falls back to status-based grouping for legacy issues.
+  columnId  String?
+  column    BoardColumn? @relation(fields: [columnId], references: [id], onDelete: SetNull)
+
   @@index([projectId])
   @@index([parentId])
   @@index([assigneeId])   // speeds up Team Progress aggregation
   @@index([status])
   @@index([type])
   @@map("issues")
+}
+
+// ============================================
+// ISSUE LINKS — Jira-style relationships between issues
+// e.g. BLOCKS, DEPENDS_ON, RELATES_TO, DUPLICATES
+// ============================================
+
+// ============================================
+// BOARD COLUMNS — Dynamic Kanban columns per project
+// Replaces hardcoded TODO/IN_PROGRESS/DONE with fully dynamic, user-defined columns.
+// Phase 3: columns are project-scoped, ordered by `position`.
+// ============================================
+
+model BoardColumn {
+  id        String   @id @default(uuid())
+  name      String                         // Display name, e.g. "To Do", "In Progress", "Done"
+  position  Int                            // Order on the Kanban board (0-indexed, low = left)
+  color     String   @default("#5B8FEF")  // Hex color for the column header accent
+
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  issues    Issue[]  // Issues currently in this column
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([projectId, position])   // Fast: "get columns for project sorted by position"
+  @@map("board_columns")
 }
 
 // ============================================
@@ -434,4 +473,19 @@ model IssueLink {
   @@index([sourceIssueId])
   @@index([targetIssueId])
   @@map("issue_links")
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  issueId   String
+  userId    String
+  content   String
+  createdAt DateTime @default(now())
+
+  issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([issueId, createdAt])
+  @@index([userId])
+  @@map("comments")
 }

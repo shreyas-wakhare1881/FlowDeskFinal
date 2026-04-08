@@ -101,6 +101,15 @@ body {
   font-family: var(--fd-font, Inter, Poppins, system-ui, sans-serif);
 }
 
+/* Hide scrollbars but keep scroll (Jira-like) */
+.fd-hide-scrollbar {
+  scrollbar-width: none;       /* Firefox */
+  -ms-overflow-style: none;    /* IE/Edge legacy */
+}
+.fd-hide-scrollbar::-webkit-scrollbar {
+  display: none;               /* Chrome/Safari */
+}
+
 @keyframes slideIn {
   from {
     opacity: 0;

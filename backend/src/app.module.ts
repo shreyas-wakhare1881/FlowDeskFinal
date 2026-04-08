@@ -7,8 +7,19 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { IssuesModule } from './issues/issues.module';
 import { IssueLinksModule } from './issue-links/issue-links.module';
+import { BoardColumnsModule } from './board-columns/board-columns.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, ProjectsModule, TasksModule, TeamsModule, UsersModule, IssuesModule, IssueLinksModule],
+  imports: [
+    PrismaModule,
+    AuthModule,
+    ProjectsModule,
+    TasksModule,
+    TeamsModule,
+    UsersModule,
+    IssuesModule,
+    IssueLinksModule,
+    BoardColumnsModule,
+  ],
 })
 export class AppModule {}

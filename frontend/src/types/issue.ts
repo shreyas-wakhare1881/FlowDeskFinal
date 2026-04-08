@@ -38,6 +38,8 @@ export interface Issue {
   updatedAt: string;
   estimate: string | null;
   dueDate: string | null;
+  /** Phase 3: Dynamic Kanban column assignment. null = unassigned/backlog */
+  columnId: string | null;
 }
 
 // ── Issue link ────────────────────────────────────────────────────────────────
@@ -56,6 +58,15 @@ export interface IssueDetail extends Issue {
   children: Issue[];
   sourceLinks: (IssueLink & { target: Issue })[];
   targetLinks: (IssueLink & { source: Issue })[];
+}
+
+export interface IssueComment {
+  id: string;
+  issueId: string;
+  userId: string;
+  content: string;
+  createdAt: string;
+  user: IssueUser;
 }
 
 // ── Nested tree shapes ────────────────────────────────────────────────────────
@@ -110,8 +121,16 @@ export interface UpdateIssuePayload {
   type?: IssueType;
   parentId?: string | null;
   assigneeId?: string | null;
+  reporterId?: string | null;
   estimate?: string | null;
   dueDate?: string | null;
+  /** Phase 3: Dynamic Kanban column assignment */
+  columnId?: string | null;
+}
+
+export interface CreateIssueCommentPayload {
+  projectId: string;
+  content: string;
 }
 
 export interface CreateIssueLinkPayload {

@@ -95,20 +95,41 @@ export const api = {
   /**
    * DELETE request.
    * @param endpoint  API path, e.g. '/tasks/uuid'
-   * @param params    Optional query params appended to the URL.
-   *                  Use this to pass projectId for PermissionGuard:
-   *                  api.delete('/tasks/uuid', { projectId: 'proj-uuid' })
+   * @param options   Optional query params and/or JSON body.
+   *                 Backwards compatible:
+   *                 - api.delete('/tasks/uuid', { projectId: 'proj-uuid' })  // query params
+   *                 - api.delete('/board-columns/uuid', { params: { projectId }, body: { projectId } })
    */
-  delete: async <T>(endpoint: string, params?: Record<string, string>): Promise<T> => {
+  delete: async <T>(
+    endpoint: string,
+    options?: Record<string, string> | { params?: Record<string, string>; body?: unknown },
+  ): Promise<T> => {
+    const isLegacyParams =
+      options &&
+      typeof options === 'object' &&
+      !('params' in options) &&
+      !('body' in options);
+
+    const params = isLegacyParams
+      ? (options as Record<string, string>)
+      : (options as { params?: Record<string, string>; body?: unknown } | undefined)?.params;
+
+    const body = isLegacyParams
+      ? undefined
+      : (options as { params?: Record<string, string>; body?: unknown } | undefined)?.body;
+
+    const baseUrl = `${API_BASE_URL}${endpoint}`;
     const url = params
-      ? `${API_BASE_URL}${endpoint}?${new URLSearchParams(params).toString()}`
-      : `${API_BASE_URL}${endpoint}`;
+      ? `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}${new URLSearchParams(params).toString()}`
+      : baseUrl;
+
     const response = await fetch(url, {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',
         ...getAuthHeaders(),
       },
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
     return handleResponse<T>(response);
   },
